@@ -63,6 +63,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '277557539813',
     projectId: 'eventos-e7a2c',
     storageBucket: 'eventos-e7a2c.firebasestorage.app',
+    iosClientId: '277557539813-l91ciljkerg2s93h2v7kpc9io1rq4nsb.apps.googleusercontent.com',
     iosBundleId: 'com.example.eventos',
   );
 
@@ -72,6 +73,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '277557539813',
     projectId: 'eventos-e7a2c',
     storageBucket: 'eventos-e7a2c.firebasestorage.app',
+    iosClientId: '277557539813-l91ciljkerg2s93h2v7kpc9io1rq4nsb.apps.googleusercontent.com',
     iosBundleId: 'com.example.eventos',
   );
 
@@ -83,4 +85,5 @@ class DefaultFirebaseOptions {
     authDomain: 'eventos-e7a2c.firebaseapp.com',
     storageBucket: 'eventos-e7a2c.firebasestorage.app',
   );
+
 }
