@@ -6,7 +6,7 @@ class AdminEventService {
 
   // Colección correcta en tu Firestore
   CollectionReference<Map<String, dynamic>> get _col =>
-      _db.collection('events');
+      _db.collection('eventos');
 
   Stream<List<AdminEventModel>> streamAll() => _col
       .orderBy('createdAt', descending: true)

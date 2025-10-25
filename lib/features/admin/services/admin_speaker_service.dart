@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/admin_speaker_model.dart';
 
 class AdminSpeakerService {
-  final _col = FirebaseFirestore.instance.collection('speakers');
+  final _col = FirebaseFirestore.instance.collection('ponentes');
 
   Stream<List<AdminSpeakerModel>> streamAll() {
     return _col.orderBy('nombre').snapshots().map(

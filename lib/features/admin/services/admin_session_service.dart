@@ -19,11 +19,25 @@ class AdminSessionService {
   Future<void> delete(String eventId, String id) => _col(eventId).doc(id).delete();
 
   Future<void> upsert(AdminSessionModel s) async {
-    final data = s.id.isEmpty ? s.toCreate() : s.toUpdate();
-    if (s.id.isEmpty) {
-      await _col(s.eventoId).add(data);
-    } else {
-      await _col(s.eventoId).doc(s.id).set(data, SetOptions(merge: true));
+    try {
+      final data = s.id.isEmpty ? s.toCreate() : s.toUpdate();
+      if (s.id.isEmpty) {
+        final docRef = await _col(s.eventoId).add(data);
+        // ignore: avoid_print
+        print('✅ Ponencia creada con ID: ${docRef.id} en evento: ${s.eventoId}');
+      } else {
+        await _col(s.eventoId).doc(s.id).set(data, SetOptions(merge: true));
+        // ignore: avoid_print
+        print('✅ Ponencia actualizada: ${s.id} en evento: ${s.eventoId}');
+      }
+    } on FirebaseException catch (e) {
+      // ignore: avoid_print
+      print('❌ Error Firebase al guardar ponencia: ${e.code} - ${e.message}');
+      rethrow;
+    } catch (e) {
+      // ignore: avoid_print
+      print('❌ Error inesperado al guardar ponencia: $e');
+      rethrow;
     }
   }
 }

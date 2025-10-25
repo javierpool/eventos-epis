@@ -164,9 +164,9 @@ class _Dashboard extends StatelessWidget {
         mainAxisSpacing: 16,
         children: [
           // Usando los nombres correctos de las colecciones de Firebase
-          card('Eventos activos', Icons.event_rounded, _count('events', where: ['estado','==','activo'])),
-          card('Ponencias',      Icons.schedule_rounded, _countNested('events','sesiones')),
-          card('Ponentes',       Icons.record_voice_over, _count('speakers')),
+          card('Eventos activos', Icons.event_rounded, _count('eventos', where: ['estado','==','activo'])),
+          card('Ponencias',      Icons.schedule_rounded, _countNested('eventos','sesiones')),
+          card('Ponentes',       Icons.record_voice_over, _count('ponentes')),
           card('Usuarios',       Icons.people_alt_rounded, _count('usuarios')),
         ],
       ),
