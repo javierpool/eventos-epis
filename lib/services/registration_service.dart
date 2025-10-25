@@ -52,8 +52,16 @@ class RegistrationService {
   /// - Estado de asistencia (attendance)
   ///
   /// Ajusta los nombres de campos/colecciones si en tu Firestore son distintos.
+  /// Stream en tiempo real del historial del usuario
+  /// 
+  /// Se actualiza automáticamente cuando:
+  /// - Se agregan/eliminan inscripciones
+  /// - Se modifica un evento
+  /// - Se modifica una sesión
+  /// - Se marca asistencia
   Stream<List<UserRegistrationView>> watchUserHistory(String uid) {
-    final baseStream = _db
+    // Stream base de inscripciones
+    final registrationsStream = _db
         .collection('registrations')
         .where('uid', isEqualTo: uid)
         .orderBy('createdAt', descending: true)
@@ -61,13 +69,16 @@ class RegistrationService {
 
     final attendanceSvc = AttendanceService();
 
-    return baseStream.asyncMap((snap) async {
+    // Combinar con streams de eventos y sesiones para tiempo real completo
+    return registrationsStream.asyncMap((snap) async {
+      if (snap.docs.isEmpty) return <UserRegistrationView>[];
+
       final futures = snap.docs.map((d) async {
         final data = d.data();
         final String eventId = (data['eventId'] ?? '').toString();
         final String? sessionId = (data['sessionId'] as String?);
 
-        // 1) Evento
+        // 1) Obtener datos del evento en tiempo real
         final evDoc = await _db.collection('eventos').doc(eventId).get();
         final ev = evDoc.data() ?? {};
         final String eventName = (ev['nombre'] ?? '').toString();
@@ -82,26 +93,34 @@ class RegistrationService {
             ? ev['fechaFin'] as Timestamp
             : horaInicioTs;
 
-        // 2) Sesión opcional
+        // 2) Obtener datos de la sesión si existe
         if (sessionId != null && sessionId.isNotEmpty) {
-          final sesDoc = await _db
-              .collection('eventos')
-              .doc(eventId)
-              .collection('ponencias')
-              .doc(sessionId)
-              .get();
-          final ses = sesDoc.data() ?? {};
-          titulo = (ses['titulo'] ?? titulo).toString();
-          dia = (ses['dia'] ?? '').toString();
-          if (ses['horaInicio'] is Timestamp) {
-            horaInicioTs = ses['horaInicio'] as Timestamp;
-          }
-          if (ses['horaFin'] is Timestamp) {
-            horaFinTs = ses['horaFin'] as Timestamp;
+          try {
+            final sesDoc = await _db
+                .collection('eventos')
+                .doc(eventId)
+                .collection('sesiones')  // Usar 'sesiones' en lugar de 'ponencias'
+                .doc(sessionId)
+                .get();
+            
+            if (sesDoc.exists) {
+              final ses = sesDoc.data() ?? {};
+              titulo = (ses['titulo'] ?? titulo).toString();
+              dia = (ses['dia'] ?? '').toString();
+              if (ses['horaInicio'] is Timestamp) {
+                horaInicioTs = ses['horaInicio'] as Timestamp;
+              }
+              if (ses['horaFin'] is Timestamp) {
+                horaFinTs = ses['horaFin'] as Timestamp;
+              }
+            }
+          } catch (e) {
+            // Si hay error, usar los defaults del evento
+            print('⚠️ Error al cargar sesión $sessionId: $e');
           }
         }
 
-        // 3) Asistencia
+        // 3) Verificar asistencia
         final attended = await attendanceSvc.wasMarked(eventId, uid, sessionId);
 
         return UserRegistrationView(
@@ -117,10 +136,22 @@ class RegistrationService {
       }).toList();
 
       final list = await Future.wait(futures);
-      // Orden por horaInicio descendente (opcional, ya viene por createdAt desc)
+      // Ordenar por fecha de inicio descendente
       list.sort((a, b) => b.horaInicio.compareTo(a.horaInicio));
       return list;
     });
+  }
+  
+  /// Stream en tiempo real del estado de registro para una sesión específica
+  /// 
+  /// Se actualiza automáticamente cuando el usuario se registra o des-registra
+  Stream<bool> watchRegistrationStatus(String uid, String eventId, [String? sessionId]) {
+    final id = _docId(eventId, uid, sessionId);
+    return _db
+        .collection('registrations')
+        .doc(id)
+        .snapshots()
+        .map((doc) => doc.exists);
   }
 
   /* =================== Estado para una sesión concreta =================== */

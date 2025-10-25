@@ -25,6 +25,42 @@ class AttendanceService {
     final doc = await _db.collection('attendance').doc(id).get();
     return doc.exists && (doc.data()?['present'] == true);
   }
+  
+  /// Stream en tiempo real del estado de asistencia
+  /// 
+  /// Se actualiza automáticamente cuando se marca/desmarca la asistencia
+  Stream<bool> watchAttendanceStatus(String eventId, String uid, [String? sessionId]) {
+    final id = _docId(eventId, uid, sessionId);
+    return _db
+        .collection('attendance')
+        .doc(id)
+        .snapshots()
+        .map((doc) => doc.exists && (doc.data()?['present'] == true));
+  }
+  
+  /// Stream de todas las asistencias de un evento
+  /// 
+  /// Útil para ver en tiempo real quién ha asistido
+  Stream<List<Map<String, dynamic>>> watchEventAttendance(String eventId) {
+    return _db
+        .collection('attendance')
+        .where('eventId', isEqualTo: eventId)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.data()).toList());
+  }
+  
+  /// Stream de asistencias por sesión específica
+  Stream<List<Map<String, dynamic>>> watchSessionAttendance(
+    String eventId, 
+    String sessionId
+  ) {
+    return _db
+        .collection('attendance')
+        .where('eventId', isEqualTo: eventId)
+        .where('sessionId', isEqualTo: sessionId)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.data()).toList());
+  }
 
   /// NUEVO: marca asistencia solo si estamos dentro de la ventana de tiempo.
   /// Usa tolerancia: 15 min antes y 30 min después.

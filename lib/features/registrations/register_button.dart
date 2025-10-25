@@ -22,21 +22,6 @@ class _RegisterButtonState extends State<RegisterButton> {
   final _svc = RegistrationService();
 
   bool _loading = false;
-  bool _registered = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkStatus();
-  }
-
-  Future<void> _checkStatus() async {
-    final u = _auth.currentUser;
-    if (u == null) return;
-    final reg = await _svc.isRegistered(u.uid, widget.eventId, widget.sessionId);
-    if (!mounted) return;
-    setState(() => _registered = reg);
-  }
 
   Future<void> _doRegister() async {
     final u = _auth.currentUser;
@@ -52,14 +37,46 @@ class _RegisterButtonState extends State<RegisterButton> {
     try {
       await _svc.register(u.uid, widget.eventId, widget.sessionId);
       if (!mounted) return;
-      setState(() => _registered = true);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Inscripción registrada correctamente')),
+        const SnackBar(
+          content: Text('✅ Inscripción registrada correctamente'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al registrar: $e')),
+        SnackBar(
+          content: Text('❌ Error al registrar: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+  
+  Future<void> _doUnregister() async {
+    final u = _auth.currentUser;
+    if (u == null) return;
+
+    setState(() => _loading = true);
+    try {
+      await _svc.unregister(u.uid, widget.eventId, widget.sessionId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('ℹ️ Inscripción cancelada'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Error al cancelar: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -68,15 +85,59 @@ class _RegisterButtonState extends State<RegisterButton> {
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton(
-      onPressed: (_loading || _registered) ? null : _doRegister,
-      child: _loading
-          ? const SizedBox(
+    final uid = _auth.currentUser?.uid;
+    
+    // Si no hay usuario, mostrar botón deshabilitado
+    if (uid == null) {
+      return FilledButton(
+        onPressed: null,
+        child: const Text('Inicia sesión'),
+      );
+    }
+    
+    // Usar StreamBuilder para actualización en tiempo real
+    return StreamBuilder<bool>(
+      stream: _svc.watchRegistrationStatus(uid, widget.eventId, widget.sessionId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const FilledButton(
+            onPressed: null,
+            child: SizedBox(
               width: 18,
               height: 18,
               child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Text(_registered ? 'Inscrito' : 'Inscribirme'),
+            ),
+          );
+        }
+        
+        final isRegistered = snapshot.data ?? false;
+        
+        return FilledButton(
+          onPressed: _loading 
+              ? null 
+              : (isRegistered ? _doUnregister : _doRegister),
+          style: isRegistered 
+              ? FilledButton.styleFrom(backgroundColor: Colors.green)
+              : null,
+          child: _loading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(isRegistered ? Icons.check_circle : Icons.add_circle),
+                    const SizedBox(width: 8),
+                    Text(isRegistered ? 'Inscrito' : 'Inscribirme'),
+                  ],
+                ),
+        );
+      },
     );
   }
 }
