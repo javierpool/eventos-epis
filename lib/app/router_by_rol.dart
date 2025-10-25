@@ -23,6 +23,33 @@ class PonenteHome extends StatelessWidget {
       const Scaffold(body: Center(child: Text('Panel Ponente')));
 }
 
+/// Determina si un usuario debería ser admin automáticamente
+/// 
+/// TEMPORAL: Configura aquí los emails que deberían ser admin
+bool _shouldBeAdmin(String? email) {
+  if (email == null) return false;
+  
+  final emailLower = email.toLowerCase().trim();
+  
+  // Lista de emails que deberían ser admin
+  const adminEmails = [
+    // Agrega aquí tu email de administrador
+    // Ejemplo: 'admin@virtual.upt.pe',
+  ];
+  
+  // Si está en la lista de admins
+  if (adminEmails.contains(emailLower)) return true;
+  
+  // TEMPORAL: El primer usuario con email institucional es admin
+  // (Puedes comentar esto después de configurar el primer admin)
+  if (emailLower.endsWith('@virtual.upt.pe')) {
+    // Solo para el primer usuario - después comenta esto
+    return true;
+  }
+  
+  return false;
+}
+
 /// Función que devuelve el widget de home según el rol del usuario
 /// 
 /// Esta función es usada por [AuthWrapper] para determinar a qué pantalla
@@ -40,23 +67,48 @@ Future<Widget> goHomeByRolWidget(BuildContext context, User user) async {
     if (!snap.exists) {
       AppLogger.warning('Documento de usuario no existe, creando: ${user.uid}');
       
+      // TEMPORAL: Auto-asignar admin al primer usuario o a emails específicos
+      final isAutoAdmin = _shouldBeAdmin(user.email);
+      
       // Crear documento si no existe
       await ref.set({
         'email': user.email?.toLowerCase() ?? '',
         'displayName': user.displayName ?? '',
         'photoURL': user.photoURL ?? '',
-        'role': UserRoles.student,
-        'rol': UserRoles.student,
+        'role': isAutoAdmin ? UserRoles.admin : UserRoles.student,
+        'rol': isAutoAdmin ? UserRoles.admin : UserRoles.student,
         'active': true,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      
+      if (isAutoAdmin) {
+        AppLogger.success('✨ Usuario creado como ADMINISTRADOR: ${user.email}');
+        return const AdminHomeScreen();
+      }
       
       AppLogger.success('Usuario creado como estudiante: ${user.email}');
       return const StudentHomeScreen();
     }
 
     final data = Map<String, dynamic>.from(snap.data() ?? {});
+    
+    // TEMPORAL: Actualizar a admin si el usuario debería serlo pero no lo es
+    final isAutoAdmin = _shouldBeAdmin(user.email);
+    final currentRole = (data['role'] ?? data['rol'])?.toString() ?? UserRoles.student;
+    
+    if (isAutoAdmin && currentRole.toLowerCase() != UserRoles.admin) {
+      AppLogger.info('🔄 Actualizando usuario a ADMIN: ${user.email}');
+      await ref.update({
+        'role': UserRoles.admin,
+        'rol': UserRoles.admin,
+        'active': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      AppLogger.success('✅ Usuario actualizado a ADMINISTRADOR');
+      return const AdminHomeScreen();
+    }
+    
     final roleRaw = (data['role'] ?? data['rol'])?.toString() ?? UserRoles.student;
     final role = roleRaw.toLowerCase().trim();
     final active = (data['active'] ?? true) == true;
