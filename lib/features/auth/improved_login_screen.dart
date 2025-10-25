@@ -55,10 +55,10 @@ class _ImprovedLoginScreenState extends State<ImprovedLoginScreen> {
     
     setState(() => _isLoading = true);
     
+    final email = _emailCtrl.text.trim().toLowerCase();
+    final password = _passCtrl.text;
+    
     try {
-      final email = _emailCtrl.text.trim().toLowerCase();
-      final password = _passCtrl.text;
-
       // Validar que emails institucionales usen Google
       if (_institutionalMode || _authController.isInstitutionalEmail(email)) {
         _showSnackbar(ErrorMessages.institutionalOnly);

@@ -13,7 +13,7 @@ class EventListScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final q = query ??
         FirebaseFirestore.instance
-            .collection(FirestorePaths.events)
+            .collection(FirestorePaths.eventos)
             .orderBy('startAt', descending: true);
 
     return Scaffold(

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/error_handler.dart';
 import '../models/admin_session_model.dart';
 
 class AdminSessionService {
@@ -23,20 +24,16 @@ class AdminSessionService {
       final data = s.id.isEmpty ? s.toCreate() : s.toUpdate();
       if (s.id.isEmpty) {
         final docRef = await _col(s.eventoId).add(data);
-        // ignore: avoid_print
-        print('✅ Ponencia creada con ID: ${docRef.id} en evento: ${s.eventoId}');
+        AppLogger.info('Sesión creada con ID: ${docRef.id}, evento: ${s.eventoId}, titulo: ${s.titulo}');
       } else {
         await _col(s.eventoId).doc(s.id).set(data, SetOptions(merge: true));
-        // ignore: avoid_print
-        print('✅ Ponencia actualizada: ${s.id} en evento: ${s.eventoId}');
+        AppLogger.info('Sesión actualizada: ${s.id}, evento: ${s.eventoId}, titulo: ${s.titulo}');
       }
-    } on FirebaseException catch (e) {
-      // ignore: avoid_print
-      print('❌ Error Firebase al guardar ponencia: ${e.code} - ${e.message}');
+    } on FirebaseException catch (e, st) {
+      AppLogger.error('Error Firebase al guardar sesión: ${e.message}', e, st);
       rethrow;
-    } catch (e) {
-      // ignore: avoid_print
-      print('❌ Error inesperado al guardar ponencia: $e');
+    } catch (e, st) {
+      AppLogger.error('Error inesperado al guardar sesión: $e', e, st);
       rethrow;
     }
   }

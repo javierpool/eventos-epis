@@ -1,17 +1,21 @@
 // lib/services/registration_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/error_handler.dart';
 import 'attendance_service.dart';
 
 class RegistrationService {
   final _db = FirebaseFirestore.instance;
+  
+  // Nombre de la colección (registrations en inglés para consistencia con BD existente)
+  static const String _collectionName = 'registrations';
 
   /* =================== CRUD básico de inscripciones =================== */
 
   // Stream sencillo por usuario (si lo necesitas en otros lados)
   Stream<QuerySnapshot<Map<String, dynamic>>> watchByUser(String uid) {
     return _db
-        .collection('registrations')
+        .collection(_collectionName)
         .where('uid', isEqualTo: uid)
         .snapshots();
   }
@@ -24,7 +28,7 @@ class RegistrationService {
 
   Future<void> register(String uid, String eventId, [String? sessionId]) async {
     final id = _docId(eventId, uid, sessionId);
-    await _db.collection('registrations').doc(id).set({
+    await _db.collection(_collectionName).doc(id).set({
       'id': id,
       'eventId': eventId,
       'uid': uid,
@@ -35,34 +39,31 @@ class RegistrationService {
 
   Future<void> unregister(String uid, String eventId, [String? sessionId]) async {
     final id = _docId(eventId, uid, sessionId);
-    await _db.collection('registrations').doc(id).delete();
+    await _db.collection(_collectionName).doc(id).delete();
   }
 
   Future<bool> isRegistered(String uid, String eventId, [String? sessionId]) async {
     final id = _docId(eventId, uid, sessionId);
-    final doc = await _db.collection('registrations').doc(id).get();
+    final doc = await _db.collection(_collectionName).doc(id).get();
     return doc.exists;
   }
 
   /* =================== Historial para StudentHome =================== */
-  /// Devuelve un stream con el historial del usuario combinando:
-  /// - Inscripción (registrations)
+  
+  /// Stream en tiempo real del historial del usuario combinando:
+  /// - Inscripciones (registrations)
   /// - Datos del evento (eventos/{eventId})
-  /// - Datos de la ponencia si existe (eventos/{eventId}/ponencias/{sessionId})
+  /// - Datos de la sesión (eventos/{eventId}/sesiones/{sessionId})
   /// - Estado de asistencia (attendance)
-  ///
-  /// Ajusta los nombres de campos/colecciones si en tu Firestore son distintos.
-  /// Stream en tiempo real del historial del usuario
   /// 
   /// Se actualiza automáticamente cuando:
   /// - Se agregan/eliminan inscripciones
-  /// - Se modifica un evento
-  /// - Se modifica una sesión
+  /// - Se modifica un evento o sesión
   /// - Se marca asistencia
   Stream<List<UserRegistrationView>> watchUserHistory(String uid) {
     // Stream base de inscripciones
     final registrationsStream = _db
-        .collection('registrations')
+        .collection(_collectionName)
         .where('uid', isEqualTo: uid)
         .orderBy('createdAt', descending: true)
         .snapshots();
@@ -116,7 +117,7 @@ class RegistrationService {
             }
           } catch (e) {
             // Si hay error, usar los defaults del evento
-            print('⚠️ Error al cargar sesión $sessionId: $e');
+            AppLogger.warning('Error al cargar sesión: $sessionId, evento: $eventId, error: $e');
           }
         }
 
@@ -148,7 +149,7 @@ class RegistrationService {
   Stream<bool> watchRegistrationStatus(String uid, String eventId, [String? sessionId]) {
     final id = _docId(eventId, uid, sessionId);
     return _db
-        .collection('registrations')
+        .collection(_collectionName)
         .doc(id)
         .snapshots()
         .map((doc) => doc.exists);

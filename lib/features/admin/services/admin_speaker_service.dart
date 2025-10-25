@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/error_handler.dart';
 import '../models/admin_speaker_model.dart';
 
 class AdminSpeakerService {
@@ -19,20 +20,16 @@ class AdminSpeakerService {
       final data = s.id.isEmpty ? s.toCreate() : s.toUpdate();
       if (s.id.isEmpty) {
         final docRef = await _col.add(data);
-        // ignore: avoid_print
-        print('✅ Ponente creado con ID: ${docRef.id}');
+        AppLogger.info('Ponente creado con ID: ${docRef.id}, nombre: ${s.nombre}');
       } else {
         await _col.doc(s.id).set(data, SetOptions(merge: true));
-        // ignore: avoid_print
-        print('✅ Ponente actualizado: ${s.id}');
+        AppLogger.info('Ponente actualizado: ${s.id}, nombre: ${s.nombre}');
       }
-    } on FirebaseException catch (e) {
-      // ignore: avoid_print
-      print('❌ Error Firebase: ${e.code} - ${e.message}');
+    } on FirebaseException catch (e, st) {
+      AppLogger.error('Error Firebase al guardar ponente: ${e.message}', e, st);
       rethrow;
-    } catch (e) {
-      // ignore: avoid_print
-      print('❌ Error inesperado: $e');
+    } catch (e, st) {
+      AppLogger.error('Error inesperado al guardar ponente: $e', e, st);
       rethrow;
     }
   }

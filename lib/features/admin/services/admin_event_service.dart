@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/error_handler.dart';
 import '../models/admin_event_model.dart';
 
 class AdminEventService {
@@ -29,20 +30,17 @@ class AdminEventService {
         // CREATE - devolver el ID generado
         final data = e.toMapForCreate()..['dias'] = diasCalc;
         final docRef = await _col.add(data);
-        // ignore: avoid_print
-        print('✅ Evento creado con ID: ${docRef.id}');
+        AppLogger.info('Evento creado con ID: ${docRef.id}, nombre: ${e.nombre}');
         return docRef.id;
       } else {
         // UPDATE - devolver el ID existente
         final data = e.toMapForUpdate()..['dias'] = diasCalc;
         await _col.doc(e.id).set(data, SetOptions(merge: true));
-        // ignore: avoid_print
-        print('✅ Evento actualizado: ${e.id}');
+        AppLogger.info('Evento actualizado: ${e.id}, nombre: ${e.nombre}');
         return e.id;
       }
-    } on FirebaseException catch (e) {
-      // ignore: avoid_print
-      print('❌ Error Firebase: ${e.code} - ${e.message}');
+    } on FirebaseException catch (e, st) {
+      AppLogger.error('Error al guardar evento: ${e.message}', e, st);
       throw 'Firestore upsertAndGetId() falló: ${e.message}';
     }
   }
@@ -61,18 +59,15 @@ class AdminEventService {
         // CREATE
         final data = e.toMapForCreate()..['dias'] = diasCalc;
         final docRef = await _col.add(data);
-        // ignore: avoid_print
-        print('✅ Evento creado con ID: ${docRef.id}');
+        AppLogger.info('Evento creado con ID: ${docRef.id}, nombre: ${e.nombre}');
       } else {
         // UPDATE (merge)
         final data = e.toMapForUpdate()..['dias'] = diasCalc;
         await _col.doc(e.id).set(data, SetOptions(merge: true));
-        // ignore: avoid_print
-        print('✅ Evento actualizado: ${e.id}');
+        AppLogger.info('Evento actualizado: ${e.id}, nombre: ${e.nombre}');
       }
-    } on FirebaseException catch (e) {
-      // ignore: avoid_print
-      print('❌ Error Firebase: ${e.code} - ${e.message}');
+    } on FirebaseException catch (e, st) {
+      AppLogger.error('Error al guardar evento: ${e.message}', e, st);
       throw 'Firestore upsert() falló: ${e.message}';
     }
   }

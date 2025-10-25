@@ -3,6 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AttendanceService {
   final _db = FirebaseFirestore.instance;
+  
+  // Nombre de la colección (attendance en inglés para consistencia con BD existente)
+  static const String _collectionName = 'attendance';
 
   String _docId(String eventId, String uid, [String? sessionId]) {
     return sessionId == null ? '${eventId}_$uid' : '${eventId}_${sessionId}_$uid';
@@ -10,7 +13,7 @@ class AttendanceService {
 
   Future<void> mark(String eventId, String uid, [String? sessionId]) async {
     final id = _docId(eventId, uid, sessionId);
-    await _db.collection('attendance').doc(id).set({
+    await _db.collection(_collectionName).doc(id).set({
       'id': id,
       'eventId': eventId,
       'uid': uid,
@@ -22,7 +25,7 @@ class AttendanceService {
 
   Future<bool> wasMarked(String eventId, String uid, [String? sessionId]) async {
     final id = _docId(eventId, uid, sessionId);
-    final doc = await _db.collection('attendance').doc(id).get();
+    final doc = await _db.collection(_collectionName).doc(id).get();
     return doc.exists && (doc.data()?['present'] == true);
   }
   
@@ -32,7 +35,7 @@ class AttendanceService {
   Stream<bool> watchAttendanceStatus(String eventId, String uid, [String? sessionId]) {
     final id = _docId(eventId, uid, sessionId);
     return _db
-        .collection('attendance')
+        .collection(_collectionName)
         .doc(id)
         .snapshots()
         .map((doc) => doc.exists && (doc.data()?['present'] == true));
@@ -43,7 +46,7 @@ class AttendanceService {
   /// Útil para ver en tiempo real quién ha asistido
   Stream<List<Map<String, dynamic>>> watchEventAttendance(String eventId) {
     return _db
-        .collection('attendance')
+        .collection(_collectionName)
         .where('eventId', isEqualTo: eventId)
         .snapshots()
         .map((snap) => snap.docs.map((d) => d.data()).toList());
@@ -55,7 +58,7 @@ class AttendanceService {
     String sessionId
   ) {
     return _db
-        .collection('attendance')
+        .collection(_collectionName)
         .where('eventId', isEqualTo: eventId)
         .where('sessionId', isEqualTo: sessionId)
         .snapshots()
