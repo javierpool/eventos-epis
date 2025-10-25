@@ -182,29 +182,37 @@ class _Dashboard extends StatelessWidget {
   }
 
   Stream<int> _countNested(String parentCol, String childCol) {
-    // Método optimizado: cuenta documentos sin esperar a todas las consultas secuenciales
-    return FirebaseFirestore.instance.collection(parentCol).snapshots().asyncExpand((parent) async* {
-      int total = 0;
-      if (parent.docs.isEmpty) {
-        yield 0;
-        return;
-      }
-      
-      // Ejecutar todas las consultas en paralelo
-      final futures = parent.docs.map((d) => 
-        d.reference.collection(childCol).count().get().then((n) => n.count ?? 0)
-      ).toList();
-      
-      try {
-        final counts = await Future.wait(futures);
-        total = counts.fold<int>(0, (sum, count) => sum + count);
+    // Escucha cambios en la colección padre y cuenta todas las sesiones en paralelo
+    return FirebaseFirestore.instance
+        .collection(parentCol)
+        .snapshots()
+        .asyncMap((parentSnapshot) async {
+      if (parentSnapshot.docs.isEmpty) {
         // ignore: avoid_print
-        print('✅ Total de $childCol: $total');
-        yield total;
+        print('⚠️ No hay documentos en $parentCol');
+        return 0;
+      }
+
+      try {
+        // Crear todas las consultas de conteo en paralelo
+        final countFutures = parentSnapshot.docs.map((doc) {
+          return doc.reference
+              .collection(childCol)
+              .get()
+              .then((snapshot) => snapshot.docs.length);
+        }).toList();
+
+        // Esperar a que todas terminen
+        final counts = await Future.wait(countFutures);
+        final total = counts.fold<int>(0, (sum, count) => sum + count);
+
+        // ignore: avoid_print
+        print('✅ Total de $childCol: $total (de ${parentSnapshot.docs.length} $parentCol)');
+        return total;
       } catch (e) {
         // ignore: avoid_print
         print('❌ Error contando $childCol: $e');
-        yield 0;
+        return 0;
       }
     });
   }
