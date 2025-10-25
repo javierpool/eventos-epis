@@ -12,13 +12,44 @@ class StudentHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final user = FirebaseAuth.instance.currentUser;
 
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Eventos EPIS'),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Eventos EPIS'),
+              if (user?.email != null)
+                Text(
+                  user!.email!,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+            ],
+          ),
           actions: [
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: cs.primaryContainer,
+              backgroundImage: user?.photoURL != null 
+                  ? NetworkImage(user!.photoURL!) 
+                  : null,
+              child: user?.photoURL == null
+                  ? Icon(
+                      Icons.person,
+                      size: 18,
+                      color: cs.onPrimaryContainer,
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 8),
             IconButton(
               tooltip: 'Cerrar sesión',
               onPressed: () async {
@@ -28,10 +59,27 @@ class StudentHomeScreen extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Disponibles'),
-              Tab(text: 'Mi historial'),
+          bottom: TabBar(
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicator: BoxDecoration(
+              color: cs.primaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            labelColor: cs.onPrimaryContainer,
+            unselectedLabelColor: cs.onSurfaceVariant,
+            labelStyle: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+            tabs: const [
+              Tab(
+                icon: Icon(Icons.event_available_rounded, size: 20),
+                text: 'Eventos Disponibles',
+              ),
+              Tab(
+                icon: Icon(Icons.history_rounded, size: 20),
+                text: 'Mis Inscripciones',
+              ),
             ],
           ),
         ),
@@ -76,9 +124,9 @@ class _AvailableEventsTab extends StatelessWidget {
 
         if (docs.isEmpty) {
           return const _EmptyState(
-            icon: Icons.event_available_outlined,
-            title: 'No hay eventos disponibles',
-            subtitle: 'Cuando se publique uno nuevo, aparecerá aquí.',
+            icon: Icons.event_busy_outlined,
+            title: 'No hay eventos activos',
+            subtitle: 'Por el momento no hay eventos publicados. Cuando haya nuevos eventos disponibles, aparecerán aquí automáticamente.',
           );
         }
 
@@ -154,10 +202,18 @@ class _MyHistoryTab extends StatelessWidget {
         }
         final items = snap.data ?? const <UserRegistrationView>[];
         if (items.isEmpty) {
-          return const _EmptyState(
-            icon: Icons.history_toggle_off_outlined,
-            title: 'Sin historial aún',
-            subtitle: 'Cuando te inscribas a ponencias, aparecerán aquí.',
+          return _EmptyState(
+            icon: Icons.assignment_outlined,
+            title: 'Sin inscripciones todavía',
+            subtitle: 'Ve a la pestaña "Eventos Disponibles" para inscribirte a ponencias y eventos.',
+            action: FilledButton.icon(
+              icon: const Icon(Icons.event_available_rounded),
+              label: const Text('Ver Eventos'),
+              onPressed: () {
+                // Cambiar a la primera tab
+                DefaultTabController.of(context).animateTo(0);
+              },
+            ),
           );
         }
 
@@ -242,10 +298,13 @@ class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final Widget? action;
+  
   const _EmptyState({
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.action,
   });
 
   @override
@@ -253,22 +312,46 @@ class _EmptyState extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 44, color: cs.primary),
-            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cs.primaryContainer.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                size: 64,
+                color: cs.primary,
+              ),
+            ),
+            const SizedBox(height: 24),
             Text(
               title,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 20,
+                color: cs.onSurface,
+              ),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 12),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(color: cs.onSurfaceVariant),
+              style: TextStyle(
+                color: cs.onSurfaceVariant,
+                fontSize: 15,
+                height: 1.5,
+              ),
             ),
+            if (action != null) ...[
+              const SizedBox(height: 24),
+              action!,
+            ],
           ],
         ),
       ),
