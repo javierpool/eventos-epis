@@ -15,6 +15,38 @@ class AdminEventService {
 
   Future<void> delete(String id) => _col.doc(id).delete();
 
+  /// Guardar evento y devolver su ID
+  Future<String> upsertAndGetId(AdminEventModel e) async {
+    try {
+      final DateTime? inicio = e.fechaInicio;
+      final DateTime? fin = e.fechaFin;
+
+      final List<String> diasCalc = (e.dias.isNotEmpty || inicio == null)
+          ? e.dias
+          : _buildDias(inicio!, (fin ?? inicio)!);
+
+      if (e.id.isEmpty) {
+        // CREATE - devolver el ID generado
+        final data = e.toMapForCreate()..['dias'] = diasCalc;
+        final docRef = await _col.add(data);
+        // ignore: avoid_print
+        print('✅ Evento creado con ID: ${docRef.id}');
+        return docRef.id;
+      } else {
+        // UPDATE - devolver el ID existente
+        final data = e.toMapForUpdate()..['dias'] = diasCalc;
+        await _col.doc(e.id).set(data, SetOptions(merge: true));
+        // ignore: avoid_print
+        print('✅ Evento actualizado: ${e.id}');
+        return e.id;
+      }
+    } on FirebaseException catch (e) {
+      // ignore: avoid_print
+      print('❌ Error Firebase: ${e.code} - ${e.message}');
+      throw 'Firestore upsertAndGetId() falló: ${e.message}';
+    }
+  }
+
   Future<void> upsert(AdminEventModel e) async {
     try {
       final DateTime? inicio = e.fechaInicio;

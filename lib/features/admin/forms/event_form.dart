@@ -2,8 +2,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/admin_event_model.dart';
+import '../models/admin_session_model.dart';
 import '../services/admin_event_service.dart';
+import '../services/admin_session_service.dart';
 import '../../../common/ui.dart';
+import 'session_form.dart';
 
 class EventFormDialog extends StatefulWidget {
   final AdminEventModel? existing;
@@ -113,6 +116,66 @@ class _EventFormDialogState extends State<EventFormDialog> {
     }
   }
 
+  Future<void> _saveAndAddSession() async {
+    if (!_form.currentState!.validate()) return;
+    if (_inicio == null || _fin == null) {
+      Ui.showSnack(context, 'Selecciona inicio y fin');
+      return;
+    }
+    if (_fin!.isBefore(_inicio!)) {
+      Ui.showSnack(context, 'La fecha de fin no puede ser anterior al inicio');
+      return;
+    }
+
+    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? 'admin-uid';
+
+    final model = AdminEventModel(
+      id: '',  // Siempre nuevo
+      nombre: _nombre.text.trim(),
+      tipo: _tipo,
+      descripcion: _descripcion.text.trim(),
+      fechaInicio: _inicio,
+      fechaFin: _fin,
+      dias: const [],
+      lugarGeneral: _lugar.text.trim(),
+      modalidadGeneral: 'Mixta',
+      aforoGeneral: int.tryParse(_aforo.text) ?? 0,
+      estado: _estado,
+      requiereInscripcionPorSesion: _reqInscSesion,
+      createdBy: currentUid,
+      createdAt: null,
+    );
+
+    try {
+      // Guardar el evento y obtener su ID
+      final eventId = await _svc.upsertAndGetId(model);
+      
+      if (!mounted) return;
+      
+      // Cerrar el diálogo del evento
+      Navigator.pop(context);
+      
+      // Mostrar mensaje de éxito
+      Ui.showSnack(context, 'Evento guardado. Ahora agrega ponencias');
+      
+      // Abrir el formulario de ponencias con el evento pre-seleccionado
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      if (!mounted) return;
+      
+      showDialog(
+        context: context,
+        builder: (_) => SessionFormDialog(
+          existing: null,
+          preselectedEventId: eventId,
+          preselectedEventName: _nombre.text.trim(),
+        ),
+      );
+    } catch (e) {
+      if (mounted) Ui.showSnack(context, 'Error: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -217,11 +280,39 @@ class _EventFormDialogState extends State<EventFormDialog> {
         ),
       ),
       actions: [
+        // Si es edición, mostrar botón para agregar ponencias
+        if (widget.existing != null) ...[
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              showDialog(
+                context: context,
+                builder: (_) => SessionFormDialog(
+                  existing: null,
+                  preselectedEventId: widget.existing!.id,
+                  preselectedEventName: widget.existing!.nombre,
+                ),
+              );
+            },
+            icon: const Icon(Icons.add_circle_outline),
+            label: const Text('Agregar ponencia'),
+          ),
+        ],
+        const Spacer(),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancelar'),
         ),
         FilledButton(onPressed: _save, child: const Text('Guardar')),
+        // Si es nuevo evento, opción de guardar y agregar ponencias
+        if (widget.existing == null) ...[
+          const SizedBox(width: 8),
+          FilledButton.tonalIcon(
+            onPressed: _saveAndAddSession,
+            icon: const Icon(Icons.add),
+            label: const Text('Guardar y agregar ponencia'),
+          ),
+        ],
       ],
     );
   }

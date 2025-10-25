@@ -14,7 +14,15 @@ import '../../../common/ui.dart';
 
 class SessionFormDialog extends StatefulWidget {
   final AdminSessionModel? existing;
-  const SessionFormDialog({super.key, this.existing});
+  final String? preselectedEventId;
+  final String? preselectedEventName;
+  
+  const SessionFormDialog({
+    super.key,
+    this.existing,
+    this.preselectedEventId,
+    this.preselectedEventName,
+  });
 
   @override
   State<SessionFormDialog> createState() => _SessionFormDialogState();
@@ -56,6 +64,9 @@ class _SessionFormDialogState extends State<SessionFormDialog> {
       _tags.text = s.tags.join(', ');
       _inicio = s.horaInicio.toDate();
       _fin = s.horaFin.toDate();
+    } else if (widget.preselectedEventId != null) {
+      // Si viene un evento pre-seleccionado, usarlo
+      _eventoId = widget.preselectedEventId;
     }
   }
 
