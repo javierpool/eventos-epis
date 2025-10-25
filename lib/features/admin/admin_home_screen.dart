@@ -182,19 +182,30 @@ class _Dashboard extends StatelessWidget {
   }
 
   Stream<int> _countNested(String parentCol, String childCol) {
-    // Usa collectionGroup para obtener TODAS las sesiones de TODOS los eventos en UNA sola consulta
-    return FirebaseFirestore.instance
-        .collectionGroup(childCol)
-        .snapshots()
-        .map((snapshot) {
-      final count = snapshot.size;
-      // ignore: avoid_print
-      print('✅ Total de $childCol: $count (usando collectionGroup)');
-      return count;
-    }).handleError((e) {
-      // ignore: avoid_print
-      print('❌ Error contando colección anidada $parentCol/$childCol: $e');
-      return 0;
+    // Método optimizado: cuenta documentos sin esperar a todas las consultas secuenciales
+    return FirebaseFirestore.instance.collection(parentCol).snapshots().asyncExpand((parent) async* {
+      int total = 0;
+      if (parent.docs.isEmpty) {
+        yield 0;
+        return;
+      }
+      
+      // Ejecutar todas las consultas en paralelo
+      final futures = parent.docs.map((d) => 
+        d.reference.collection(childCol).count().get().then((n) => n.count ?? 0)
+      ).toList();
+      
+      try {
+        final counts = await Future.wait(futures);
+        total = counts.fold<int>(0, (sum, count) => sum + count);
+        // ignore: avoid_print
+        print('✅ Total de $childCol: $total');
+        yield total;
+      } catch (e) {
+        // ignore: avoid_print
+        print('❌ Error contando $childCol: $e');
+        yield 0;
+      }
     });
   }
 }
