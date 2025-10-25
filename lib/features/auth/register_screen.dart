@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../utils/email_domain.dart';
+import '../../utils/email.domain.dart';
 
 Future<void> onRegisterSubmit(String email, String password, String displayName) async {
   final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(

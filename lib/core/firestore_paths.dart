@@ -1,15 +1,19 @@
 class FirestorePaths {
-static const users = 'users';
-static const events = 'events';
-static const speakers = 'speakers';
-static const sessions = 'sessions';
-static const registrations = 'registrations';
-static const attendance = 'attendance';
-static const certificates = 'certificates';
+  // Colecciones (ES)
+  static const String users    = 'usuarios';
+  static const String eventos  = 'eventos';
+  static const String ponentes = 'ponentes';
 
+  // Si el módulo de estudiante usa “events”, mantenlo también:
+  static const String events   = 'events';
 
-static String event(String id) => '$events/$id';
-static String speaker(String id) => '$speakers/$id';
-static String session(String id) => '$sessions/$id';
-static String registration(String id) => '$registrations/$id';
+  // Helpers
+  static String user(String uid) => '$users/$uid';
+
+  // events (inglés) - módulo alumno
+  static String event(String eventId) => '$events/$eventId';
+  static String registrations(String eventId) => '$events/$eventId/registrations';
+  static String registration(String eventId, String uid) => '$events/$eventId/registrations/$uid';
+  static String attendances(String eventId) => '$events/$eventId/attendances';
+  static String attendance(String eventId, String uid) => '$events/$eventId/attendances/$uid';
 }

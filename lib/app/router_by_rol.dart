@@ -3,18 +3,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-// Importa los NOMBRES REALES de las pantallas
-import '../features/admin/admin_home_screen.dart';     // clase: AdminHomeScreen
-import '../features/events/event_list_screen.dart';    // clase: EventListScreen
+import '../core/firestore_paths.dart';
+import '../features/admin/admin_home_screen.dart';
+import '../features/events/student_home_screen.dart';
 
-// Temporales si aún no tienes estas pantallas
+// Stubs (si los tienes ya, quita esto)
 class DocenteHome extends StatelessWidget {
   const DocenteHome({super.key});
   @override
   Widget build(BuildContext context) =>
       const Scaffold(body: Center(child: Text('Panel Docente')));
 }
-
 class PonenteHome extends StatelessWidget {
   const PonenteHome({super.key});
   @override
@@ -22,68 +21,124 @@ class PonenteHome extends StatelessWidget {
       const Scaffold(body: Center(child: Text('Panel Ponente')));
 }
 
-/// Crea doc por defecto si no existe (rol: estudiante)
-Future<Map<String, dynamic>> _ensureUserDoc(User u) async {
-  final ref = FirebaseFirestore.instance.collection('usuarios').doc(u.uid);
-  final snap = await ref.get();
+// Función que devuelve el widget según el rol (para AuthWrapper)
+Future<Widget> goHomeByRolWidget(BuildContext context, User user) async {
+  try {
+    // ignore: avoid_print
+    print('[router_by_rol] uid=${user.uid} email=${user.email}');
 
-  if (!snap.exists) {
-    final data = {
-      'email': u.email ?? '',
-      'displayName': u.displayName,
-      'rol': 'estudiante',
-      'active': true,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }..removeWhere((k, v) => v == null);
+    final ref = FirebaseFirestore.instance
+        .collection(FirestorePaths.users)
+        .doc(user.uid);
 
-    await ref.set(data, SetOptions(merge: true));
-    return data;
-  }
+    final snap = await ref.get(const GetOptions(source: Source.server));
+    if (!snap.exists) {
+      // ignore: avoid_print
+      print('[router_by_rol] Documento NO existe: usuarios/${user.uid}');
+      // Crear documento si no existe
+      await ref.set({
+        'email': user.email?.toLowerCase() ?? '',
+        'displayName': user.displayName ?? '',
+        'photoURL': user.photoURL ?? '',
+        'role': 'estudiante',
+        'rol': 'estudiante',
+        'active': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return const StudentHomeScreen();
+    }
 
-  final data = snap.data() ?? {};
-  if (!data.containsKey('rol')) {
-    await ref.set(
-      {'rol': 'estudiante', 'updatedAt': FieldValue.serverTimestamp()},
-      SetOptions(merge: true),
+    final data = Map<String, dynamic>.from(snap.data() ?? {});
+    final roleRaw = (data['role'] ?? data['rol'])?.toString() ?? 'estudiante';
+    final role = roleRaw.toLowerCase().trim();
+    final active = (data['active'] ?? true) == true;
+
+    // ignore: avoid_print
+    print('[router_by_rol] role="$role" active=$active');
+
+    if (!active) {
+      await FirebaseAuth.instance.signOut();
+      return const Scaffold(
+        body: Center(
+          child: Text('Tu cuenta está pendiente de activación.'),
+        ),
+      );
+    }
+
+    return switch (role) {
+      'admin'   => const AdminHomeScreen(),
+      'docente' => const DocenteHome(),
+      'ponente' => const PonenteHome(),
+      _         => const StudentHomeScreen(),
+    };
+  } catch (e) {
+    // ignore: avoid_print
+    print('[router_by_rol] Error: $e');
+    return const Scaffold(
+      body: Center(
+        child: Text('Error al cargar tu perfil'),
+      ),
     );
-    data['rol'] = 'estudiante';
   }
-  return data;
 }
 
-/// Lee `usuarios/{uid}` y navega según `rol`.
+// Función original de navegación (compatible con el código existente)
 Future<void> goHomeByRol(BuildContext context) async {
   final u = FirebaseAuth.instance.currentUser;
   if (u == null) return;
 
   try {
-    final data = await _ensureUserDoc(u);
-    final rol = (data['rol'] ?? 'estudiante').toString().toLowerCase();
+    // ignore: avoid_print
+    print('[router_by_rol] uid=${u.uid} email=${u.email}');
 
-    Widget home;
-    switch (rol) {
-      case 'admin':
-        home = const AdminHomeScreen();
-        break;
-      case 'docente':
-        home = const DocenteHome();
-        break;
-      case 'ponente':
-        home = const PonenteHome();
-        break;
-      case 'estudiante':
-      default:
-        home = const EventListScreen();
-        break;
+    if (FirestorePaths.users != 'usuarios') {
+      // ignore: avoid_print
+      print('[router_by_rol] FirestorePaths.users = ${FirestorePaths.users}  (DEBE SER "usuarios")');
     }
 
-    if (context.mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => home),
-        (_) => false,
+    final ref = FirebaseFirestore.instance
+        .collection(FirestorePaths.users)
+        .doc(u.uid);
+
+    final snap = await ref.get(const GetOptions(source: Source.server));
+    if (!snap.exists) {
+      // ignore: avoid_print
+      print('[router_by_rol] Documento NO existe: usuarios/${u.uid}');
+      throw 'No existe tu perfil en Firestore (usuarios/${u.uid}).';
+    }
+
+    final data = Map<String, dynamic>.from(snap.data() ?? {});
+    final roleRaw = (data['role'] ?? data['rol'])?.toString() ?? 'estudiante';
+    final role = roleRaw.toLowerCase().trim();
+    final active = (data['active'] ?? true) == true;
+
+    // ignore: avoid_print
+    print('[router_by_rol] data=$data');
+    // ignore: avoid_print
+    print('[router_by_rol] role="$role" active=$active');
+
+    if (!active) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tu cuenta está pendiente de activación.')),
       );
+      await FirebaseAuth.instance.signOut();
+      return;
     }
+
+    final Widget home = switch (role) {
+      'admin'   => const AdminHomeScreen(),
+      'docente' => const DocenteHome(),
+      'ponente' => const PonenteHome(),
+      _         => const StudentHomeScreen(),
+    };
+
+    if (!context.mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => home),
+      (_) => false,
+    );
   } catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

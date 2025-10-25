@@ -1,6 +1,8 @@
+// lib/features/events/event_form_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../core/firestore_paths.dart';
+import '../../models/event.dart';
+import '../../services/event_service.dart';
 
 class EventFormScreen extends StatefulWidget {
   final String? docId;
@@ -35,8 +37,15 @@ class _EventFormScreenState extends State<EventFormScreen> {
   }
 
   @override
+  void dispose() {
+    _title.dispose();
+    _desc.dispose();
+    _venue.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final col = FirebaseFirestore.instance.collection(FirestorePaths.events);
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.docId == null ? 'Nuevo evento' : 'Editar evento'),
@@ -108,26 +117,26 @@ class _EventFormScreenState extends State<EventFormScreen> {
                   return;
                 }
 
-                final data = {
-                  'title': _title.text.trim(),
-                  'description': _desc.text.trim(),
-                  'venue': _venue.text.trim(),
-                  'status': _status,
-                  'startAt':
-                      _startAt != null ? Timestamp.fromDate(_startAt!) : null,
-                  'endAt': _endAt != null ? Timestamp.fromDate(_endAt!) : null,
-                  'updatedAt': FieldValue.serverTimestamp(),
-                  if (widget.docId == null)
-                    'createdAt': FieldValue.serverTimestamp(),
-                }..removeWhere((k, v) => v == null);
+                final model = EventModel(
+                  id: widget.docId ?? '',
+                  title: _title.text.trim(),
+                  description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
+                  venue: _venue.text.trim().isEmpty ? null : _venue.text.trim(),
+                  status: _status,
+                  startAt: _startAt,
+                  endAt: _endAt,
+                );
 
-                if (widget.docId == null) {
-                  await col.add(data);
-                } else {
-                  await col.doc(widget.docId!).update(data);
+                try {
+                  await EventService().upsert(widget.docId, model);
+                  if (mounted) Navigator.pop(context);
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error guardando: $e')),
+                    );
+                  }
                 }
-
-                if (mounted) Navigator.pop(context);
               },
             ),
           ],
@@ -168,8 +177,9 @@ class _DatePickerField extends StatelessWidget {
           context: context,
           initialTime: TimeOfDay.fromDateTime(value ?? now),
         );
-        onPicked(DateTime(date.year, date.month, date.day,
-            time?.hour ?? 0, time?.minute ?? 0));
+        onPicked(DateTime(
+          date.year, date.month, date.day, time?.hour ?? 0, time?.minute ?? 0,
+        ));
       },
       child: Align(
         alignment: Alignment.centerLeft,

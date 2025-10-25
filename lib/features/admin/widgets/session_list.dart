@@ -1,7 +1,13 @@
+// lib/features/admin/widgets/session_list.dart
 import 'package:flutter/material.dart';
-import '../../../services/session_service.dart';
-import '../../../models/session.dart';
-import '../forms/session_form.dart' show SessionFormDialog;
+
+import '../models/admin_event_model.dart';
+import '../models/admin_session_model.dart';
+import '../services/admin_event_service.dart';
+import '../services/admin_session_service.dart';
+
+import '../../../common/ui.dart';
+import '../forms/session_form.dart';
 
 class SessionList extends StatefulWidget {
   const SessionList({super.key});
@@ -10,143 +16,107 @@ class SessionList extends StatefulWidget {
 }
 
 class _SessionListState extends State<SessionList> {
-  final _svc = SessionService();
-  final _eventIdCtrl = TextEditingController();
-  String? _eventId;
-
-  @override
-  void dispose() {
-    _eventIdCtrl.dispose();
-    super.dispose();
-  }
+  String? _eventoId;
+  final _eventSvc = AdminEventService();
+  final _sesSvc = AdminSessionService();
 
   @override
   Widget build(BuildContext context) {
-    final hasFilter = (_eventId != null && _eventId!.trim().isNotEmpty);
-
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _eventIdCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Filtrar por Event ID',
-                    hintText: 'Ej.: abc123…',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: () => setState(() => _eventId = _eventIdCtrl.text.trim()),
-                icon: const Icon(Icons.filter_list),
-                label: const Text('Aplicar'),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: () {
-                  _eventIdCtrl.clear();
-                  setState(() => _eventId = null);
-                },
-                child: const Text('Limpiar'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: hasFilter
-              ? _SessionsForEvent(eventId: _eventId!)
-              : Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Filtra por evento para ver ponencias.'),
-                      const SizedBox(height: 12),
-                      FilledButton(
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => const SessionFormDialog(),
-                          );
-                        },
-                        child: const Text('Crear ponencia rápida'),
+        _eventSelector(),
+        const SizedBox(height: 12),
+        if (_eventoId == null)
+          const Expanded(child: Center(child: Text('Selecciona un evento')))
+        else
+          Expanded(
+            child: StreamBuilder<List<AdminSessionModel>>(
+              stream: _sesSvc.streamByEvent(_eventoId!),
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final items = snap.data ?? const [];
+                if (items.isEmpty) {
+                  return const Center(child: Text('Sin ponencias para este evento'));
+                }
+                return ListView.separated(
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) {
+                    final s = items[i];
+                    return ListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Theme.of(context).dividerColor),
                       ),
-                    ],
-                  ),
-                ),
-        ),
+                      title: Text(
+                        s.titulo,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        "${s.modalidad} • ${s.dia} • ${s.ponenteNombre} • ${s.cuposDisponibles}/${s.aforo}",
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (v) async {
+                          if (v == 'edit') {
+                            // Abrir dialog de edición
+                            // ignore: use_build_context_synchronously
+                            showDialog(
+                              context: context,
+                              builder: (_) => SessionFormDialog(existing: s),
+                            );
+                          } else if (v == 'del') {
+                            try {
+                              await _sesSvc.delete(s.eventoId, s.id);
+                              if (context.mounted) {
+                                Ui.showSnack(context, 'Ponencia eliminada');
+                              }
+                            } catch (err) {
+                              if (context.mounted) {
+                                Ui.showSnack(context, 'Error: $err');
+                              }
+                            }
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'edit', child: Text('Editar')),
+                          PopupMenuItem(value: 'del', child: Text('Eliminar')),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
       ],
     );
   }
-}
 
-class _SessionsForEvent extends StatelessWidget {
-  final String eventId;
-  const _SessionsForEvent({required this.eventId});
-
-  @override
-  Widget build(BuildContext context) {
-    final svc = SessionService();
-    return StreamBuilder<List<SessionModel>>(
-      stream: svc.watchByEvent(eventId),
+  Widget _eventSelector() {
+    return StreamBuilder<List<AdminEventModel>>(
+      stream: _eventSvc.streamAll(),
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final items = snap.data ?? const <SessionModel>[];
-        if (items.isEmpty) {
-          return const Center(child: Text('No hay ponencias para este evento'));
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.all(12),
-          itemCount: items.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, i) {
-            final s = items[i];
-            final when =
-                '${_fmtDateTime(s.startAt)} ${s.endAt != null ? '– ${_fmtDateTime(s.endAt)}' : ''}';
-            final parts = <String>[
-              if ((s.room ?? '').isNotEmpty) 'Sala: ${s.room}',
-              if ((s.speakerId ?? '').isNotEmpty) 'Ponente: ${s.speakerId}',
-              if (s.startAt != null || s.endAt != null) when,
-            ];
-            return ListTile(
-              title: Text(s.title),
-              subtitle: Text(parts.where((e) => e.isNotEmpty).join('  •  ')),
-              trailing: PopupMenuButton<String>(
-                itemBuilder: (_) => const [
-                  PopupMenuItem<String>(value: 'edit', child: Text('Editar')),
-                  PopupMenuItem<String>(value: 'delete', child: Text('Eliminar')),
-                ],
-                onSelected: (v) async {
-                  if (v == 'edit') {
-                    // ignore: use_build_context_synchronously
-                    await showDialog(
-                      context: context,
-                      builder: (_) => SessionFormDialog(initial: s),
-                    );
-                  } else if (v == 'delete') {
-                    await svc.delete(s.id);
-                  }
-                },
-              ),
-            );
-          },
+        final items = snap.data ?? const [];
+        return DropdownButtonFormField<String>(
+          value: _eventoId,
+          isExpanded: true,
+          items: items
+              .map(
+                (e) => DropdownMenuItem<String>(
+                  value: e.id,
+                  child: Text(e.nombre),
+                ),
+              )
+              .toList(),
+          onChanged: (v) => setState(() => _eventoId = v),
+          decoration: const InputDecoration(
+            labelText: 'Evento',
+            border: OutlineInputBorder(),
+          ),
         );
       },
     );
   }
-}
-
-String _fmtDateTime(DateTime? dt) {
-  if (dt == null) return '—';
-  final dd = dt.day.toString().padLeft(2, '0');
-  final mm = dt.month.toString().padLeft(2, '0');
-  final hh = dt.hour.toString().padLeft(2, '0');
-  final mi = dt.minute.toString().padLeft(2, '0');
-  return '$dd/$mm/${dt.year} $hh:$mi';
 }

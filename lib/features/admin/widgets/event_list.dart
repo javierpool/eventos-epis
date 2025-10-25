@@ -1,63 +1,64 @@
 import 'package:flutter/material.dart';
-import '../../../services/event_service.dart';
-import '../../../models/event.dart';
-// Cambiamos a la pantalla que ya tienes creada:
-import '../../events/event_form_screen.dart';
+import '../../../common/ui.dart';
+
+import '../../../services/admin_event_service.dart';
+import '../models/admin_event_model.dart';
+import '../forms/event_form.dart';
 
 class EventList extends StatelessWidget {
   const EventList({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final svc = EventService();
-    return StreamBuilder<List<EventModel>>(
-      stream: svc.watchAll(),
+    final svc = AdminEventService();
+    return StreamBuilder<List<AdminEventModel>>(
+      stream: svc.streamAll(),
       builder: (context, snap) {
-        if (!snap.hasData) {
+        if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        final items = snap.data!;
-        if (items.isEmpty) {
-          return const Center(child: Text('Sin eventos'));
-        }
+        final items = snap.data ?? const [];
+        if (items.isEmpty) return const Center(child: Text('Sin eventos'));
+
         return ListView.separated(
-          padding: const EdgeInsets.all(12),
           itemCount: items.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, i) {
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (_, i) {
             final e = items[i];
             return ListTile(
-              title: Text(e.title),
-              subtitle: Text('${e.venue ?? ''} • ${e.status}'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Theme.of(context).dividerColor),
+              ),
+              title: Text(
+                e.nombre,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text("${e.tipo} • ${e.estado} • ${e.dias.length} día(s)"),
               trailing: PopupMenuButton<String>(
-                // 👇 sin const para evitar el error; además tipamos <String>
-                itemBuilder: (_) => [
-                  const PopupMenuItem<String>(
-                    value: 'edit',
-                    child: Text('Editar'),
-                  ),
-                  const PopupMenuItem<String>(
-                    value: 'delete',
-                    child: Text('Eliminar'),
-                  ),
-                ],
-                onSelected: (String v) async {
+                onSelected: (v) async {
                   if (v == 'edit') {
-                    // Abrimos la pantalla de edición que ya tienes
-                    // ignore: use_build_context_synchronously
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => EventFormScreen(
-                          docId: e.id,
-                          initial: e.toMap(), // pasamos el map actual
-                        ),
-                      ),
+                    showDialog(
+                      context: context,
+                      builder: (_) => EventFormDialog(existing: e),
                     );
-                  } else if (v == 'delete') {
-                    await EventService().delete(e.id);
+                  } else if (v == 'del') {
+                    try {
+                      await svc.delete(e.id);
+                      if (context.mounted) {
+                        Ui.showSnack(context, 'Evento eliminado');
+                      }
+                    } catch (err) {
+                      if (context.mounted) {
+                        Ui.showSnack(context, 'Error: $err');
+                      }
+                    }
                   }
                 },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: Text('Editar')),
+                  PopupMenuItem(value: 'del', child: Text('Eliminar')),
+                ],
               ),
             );
           },

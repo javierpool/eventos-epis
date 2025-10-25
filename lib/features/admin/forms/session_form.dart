@@ -1,11 +1,20 @@
 // lib/features/admin/forms/session_form.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import '../../../models/session.dart';
-import '../../../services/session_service.dart';
+
+import '../models/admin_session_model.dart';
+import '../models/admin_event_model.dart';
+import '../models/admin_speaker_model.dart';
+
+import '../services/admin_event_service.dart';
+import '../services/admin_session_service.dart';
+import '../services/admin_speaker_service.dart';
+
+import '../../../common/ui.dart';
 
 class SessionFormDialog extends StatefulWidget {
-  final SessionModel? initial;
-  const SessionFormDialog({super.key, this.initial});
+  final AdminSessionModel? existing;
+  const SessionFormDialog({super.key, this.existing});
 
   @override
   State<SessionFormDialog> createState() => _SessionFormDialogState();
@@ -13,93 +22,210 @@ class SessionFormDialog extends StatefulWidget {
 
 class _SessionFormDialogState extends State<SessionFormDialog> {
   final _form = GlobalKey<FormState>();
-  final _title = TextEditingController();
-  final _abstract = TextEditingController();
-  final _eventId = TextEditingController();
-  final _room = TextEditingController();
-  final _speakerId = TextEditingController();
-  DateTime? _startAt;
-  DateTime? _endAt;
+  final _titulo = TextEditingController();
+  final _sala = TextEditingController();
+  final _link = TextEditingController();
+  final _aforo = TextEditingController(text: '0');
+  final _tags = TextEditingController();
+
+  final _eventSvc = AdminEventService();
+  final _sesSvc = AdminSessionService();
+  final _spkSvc = AdminSpeakerService();
+
+  String? _eventoId;
+  String? _speakerId;
+  String? _speakerName;
+
+  String _modalidad = 'Presencial';
+  DateTime _inicio = DateTime.now().add(const Duration(hours: 2));
+  DateTime _fin = DateTime.now().add(const Duration(hours: 3));
 
   @override
   void initState() {
     super.initState();
-    final s = widget.initial;
+    final s = widget.existing;
     if (s != null) {
-      _title.text = s.title;
-      _abstract.text = s.abstract ?? '';
-      _eventId.text = s.eventId;
-      _room.text = s.room ?? '';
-      _speakerId.text = s.speakerId ?? '';
-      _startAt = s.startAt;
-      _endAt = s.endAt;
+      _eventoId = s.eventoId;
+      _titulo.text = s.titulo;
+      _speakerId = s.ponenteId;
+      _speakerName = s.ponenteNombre;
+      _modalidad = s.modalidad;
+      _sala.text = s.sala ?? '';
+      _link.text = s.link ?? '';
+      _aforo.text = s.aforo.toString();
+      _tags.text = s.tags.join(', ');
+      _inicio = s.horaInicio.toDate();
+      _fin = s.horaFin.toDate();
     }
   }
 
   @override
   void dispose() {
-    _title.dispose();
-    _abstract.dispose();
-    _eventId.dispose();
-    _room.dispose();
-    _speakerId.dispose();
+    _titulo.dispose();
+    _sala.dispose();
+    _link.dispose();
+    _aforo.dispose();
+    _tags.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDateTime({required bool isStart}) async {
+    final now = DateTime.now();
+    final base = isStart ? _inicio : _fin;
+    final pickedDate = await showDatePicker(
+      context: context,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 365 * 2)),
+      initialDate: base,
+    );
+    if (pickedDate == null) return;
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(base),
+    );
+    if (pickedTime == null) return;
+    final dt = DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
+    setState(() {
+      if (isStart) {
+        _inicio = dt;
+        if (_fin.isBefore(_inicio)) {
+          _fin = _inicio.add(const Duration(hours: 1));
+        }
+      } else {
+        _fin = dt;
+      }
+    });
+  }
+
+  Future<void> _save() async {
+    if (!_form.currentState!.validate() || _eventoId == null || _speakerId == null) {
+      Ui.showSnack(context, 'Completa los campos, selecciona evento y ponente');
+      return;
+    }
+    if (_fin.isBefore(_inicio)) {
+      Ui.showSnack(context, 'La hora de fin no puede ser anterior al inicio');
+      return;
+    }
+
+    final dia =
+        "${_inicio.year.toString().padLeft(4, '0')}-"
+        "${_inicio.month.toString().padLeft(2, '0')}-"
+        "${_inicio.day.toString().padLeft(2, '0')}";
+
+    final tags = _tags.text
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    final model = AdminSessionModel(
+      id: widget.existing?.id ?? '',
+      eventoId: _eventoId!,
+      titulo: _titulo.text.trim(),
+      ponenteId: _speakerId!,                 // <- id del ponente
+      ponenteNombre: _speakerName ?? '',      // <- nombre duplicado útil para listas
+      dia: dia,
+      horaInicio: Timestamp.fromDate(_inicio),
+      horaFin: Timestamp.fromDate(_fin),
+      modalidad: _modalidad,
+      sala: _modalidad == 'Presencial'
+          ? (_sala.text.trim().isEmpty ? 'Por definir' : _sala.text.trim())
+          : null,
+      link: _modalidad == 'Virtual' ? _link.text.trim() : null,
+      aforo: int.tryParse(_aforo.text) ?? 0,
+      cuposDisponibles: int.tryParse(_aforo.text) ?? 0,
+      tags: tags,
+      createdAt: widget.existing?.createdAt,
+    );
+
+    try {
+      await _sesSvc.upsert(model);
+      if (mounted) Navigator.pop(context);
+      if (mounted) Ui.showSnack(context, 'Ponencia guardada');
+    } catch (e) {
+      if (mounted) Ui.showSnack(context, 'Error: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final svc = SessionService();
-
     return AlertDialog(
-      title: Text(widget.initial == null ? 'Nueva ponencia' : 'Editar ponencia'),
-      content: Form(
-        key: _form,
-        child: SingleChildScrollView(
+      title: Text(widget.existing == null ? 'Nueva ponencia' : 'Editar ponencia'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _form,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              _eventSelector(),
+              const SizedBox(height: 8),
               TextFormField(
-                controller: _eventId,
-                decoration: const InputDecoration(labelText: 'Event ID *'),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Obligatorio' : null,
+                controller: _titulo,
+                decoration: const InputDecoration(labelText: 'Título'),
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null,
               ),
-              TextFormField(
-                controller: _title,
-                decoration: const InputDecoration(labelText: 'Título *'),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Obligatorio' : null,
+              const SizedBox(height: 8),
+              _speakerSelector(), // <- aquí va el selector de ponente
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _modalidad,
+                items: const [
+                  DropdownMenuItem(value: 'Presencial', child: Text('Presencial')),
+                  DropdownMenuItem(value: 'Virtual', child: Text('Virtual')),
+                ],
+                onChanged: (v) => setState(() => _modalidad = v ?? 'Presencial'),
+                decoration: const InputDecoration(labelText: 'Modalidad'),
               ),
-              TextFormField(
-                controller: _abstract,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Resumen'),
-              ),
-              TextFormField(
-                controller: _room,
-                decoration: const InputDecoration(labelText: 'Sala'),
-              ),
-              TextFormField(
-                controller: _speakerId,
-                decoration: const InputDecoration(labelText: 'Speaker ID'),
-              ),
+              if (_modalidad == 'Presencial') ...[
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _sala,
+                  decoration: const InputDecoration(labelText: 'Sala / Lugar'),
+                ),
+              ] else ...[
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _link,
+                  decoration: const InputDecoration(labelText: 'Link (Meet/Zoom)'),
+                ),
+              ],
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Expanded(
-                    child: _DateBtn(
-                      label: 'Inicio',
-                      value: _startAt,
-                      onPick: (d) => setState(() => _startAt = d),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _DateBtn(
-                      label: 'Fin',
-                      value: _endAt,
-                      onPick: (d) => setState(() => _endAt = d),
-                    ),
+                  Expanded(child: Text('Inicio: ${_inicio.toLocal().toString().substring(0, 16)}')),
+                  TextButton.icon(
+                    onPressed: () => _pickDateTime(isStart: true),
+                    icon: const Icon(Icons.access_time),
+                    label: const Text('Elegir'),
                   ),
                 ],
+              ),
+              Row(
+                children: [
+                  Expanded(child: Text('Fin: ${_fin.toLocal().toString().substring(0, 16)}')),
+                  TextButton.icon(
+                    onPressed: () => _pickDateTime(isStart: false),
+                    icon: const Icon(Icons.access_time_outlined),
+                    label: const Text('Elegir'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _aforo,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Aforo'),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _tags,
+                decoration: const InputDecoration(labelText: 'Tags (separados por coma)'),
               ),
             ],
           ),
@@ -107,84 +233,77 @@ class _SessionFormDialogState extends State<SessionFormDialog> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-        FilledButton(
-          onPressed: () async {
-            if (!_form.currentState!.validate()) return;
-
-            // Map listo para update()
-            final data = SessionModel(
-              id: widget.initial?.id ?? '',
-              eventId: _eventId.text.trim(),
-              title: _title.text.trim(),
-              abstract: _abstract.text.trim().isEmpty ? null : _abstract.text.trim(),
-              room: _room.text.trim().isEmpty ? null : _room.text.trim(),
-              speakerId: _speakerId.text.trim().isEmpty ? null : _speakerId.text.trim(),
-              startAt: _startAt,
-              endAt: _endAt,
-            ).toMap();
-
-            if (widget.initial == null) {
-              // Create: pasa un modelo completo
-              await svc.create(SessionModel(
-                id: '',
-                eventId: _eventId.text.trim(),
-                title: _title.text.trim(),
-                abstract: _abstract.text.trim().isEmpty ? null : _abstract.text.trim(),
-                room: _room.text.trim().isEmpty ? null : _room.text.trim(),
-                speakerId: _speakerId.text.trim().isEmpty ? null : _speakerId.text.trim(),
-                startAt: _startAt,
-                endAt: _endAt,
-              ));
-            } else {
-              // Update por id con map
-              await svc.update(widget.initial!.id, data);
-            }
-
-            if (mounted) Navigator.pop(context);
-          },
-          child: const Text('Guardar'),
-        ),
+        FilledButton(onPressed: _save, child: const Text('Guardar')),
       ],
     );
   }
-}
 
-class _DateBtn extends StatelessWidget {
-  final String label;
-  final DateTime? value;
-  final ValueChanged<DateTime?> onPick;
-  const _DateBtn({required this.label, required this.value, required this.onPick});
-
-  @override
-  Widget build(BuildContext context) {
-    final text = value == null
-        ? '—'
-        : '${value!.day.toString().padLeft(2, '0')}/${value!.month.toString().padLeft(2, '0')}/${value!.year} '
-          '${value!.hour.toString().padLeft(2, '0')}:${value!.minute.toString().padLeft(2, '0')}';
-
-    return OutlinedButton(
-      onPressed: () async {
-        final now = DateTime.now();
-        final date = await showDatePicker(
-          context: context,
-          initialDate: value ?? now,
-          firstDate: DateTime(now.year - 1),
-          lastDate: DateTime(now.year + 3),
+  Widget _eventSelector() {
+    return StreamBuilder<List<AdminEventModel>>(
+      stream: _eventSvc.streamAll(),
+      builder: (context, snap) {
+        final items = snap.data ?? const [];
+        return DropdownButtonFormField<String>(
+          value: _eventoId,
+          isExpanded: true,
+          items: items
+              .map((e) => DropdownMenuItem<String>(
+                    value: e.id,
+                    child: Text(e.nombre),
+                  ))
+              .toList(),
+          onChanged: (v) => setState(() => _eventoId = v),
+          decoration: const InputDecoration(
+            labelText: 'Evento',
+            border: OutlineInputBorder(),
+          ),
+          validator: (v) => (v == null || v.isEmpty) ? 'Selecciona un evento' : null,
         );
-        if (date == null) return;
-        final time = await showTimePicker(
-          context: context,
-          initialTime: TimeOfDay.fromDateTime(value ?? now),
-        );
-        onPick(DateTime(
-          date.year,
-          date.month,
-          date.day,
-          time?.hour ?? 0,
-          time?.minute ?? 0,
-        ));
       },
-      child: Align(alignment: Alignment.centerLeft, child: Text('$label: $text')),
+    );
+  }
+
+  Widget _speakerSelector() {
+    return StreamBuilder<List<AdminSpeakerModel>>(
+      stream: _spkSvc.streamAll(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const LinearProgressIndicator();
+        }
+        if (snap.hasError) {
+          return Text('Error: ${snap.error}');
+        }
+        final items = snap.data ?? const [];
+        if (items.isEmpty) {
+          return const Text('No hay ponentes registrados.');
+        }
+        // si estamos editando y tenemos id, asegura el nombre
+        if (_speakerId != null && (_speakerName == null || _speakerName!.isEmpty)) {
+          final m = items.where((e) => e.id == _speakerId);
+          if (m.isNotEmpty) _speakerName = m.first.nombre;
+        }
+        return DropdownButtonFormField<String>(
+          value: _speakerId,
+          isExpanded: true,
+          items: items
+              .map((p) => DropdownMenuItem<String>(
+                    value: p.id,
+                    child: Text(p.nombre.isEmpty ? '(sin nombre)' : p.nombre),
+                  ))
+              .toList(),
+          onChanged: (v) {
+            setState(() {
+              _speakerId = v;
+              _speakerName = v == null ? null : items.firstWhere((e) => e.id == v).nombre;
+            });
+          },
+          decoration: const InputDecoration(
+            labelText: 'Ponente',
+            border: OutlineInputBorder(),
+          ),
+          validator: (v) => (v == null || v.isEmpty) ? 'Selecciona un ponente' : null,
+        );
+      },
     );
   }
 }

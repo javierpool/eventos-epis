@@ -1,51 +1,66 @@
+// lib/features/admin/widgets/speaker_list.dart
 import 'package:flutter/material.dart';
-import '../../../services/speaker_service.dart';
-import '../../../models/speaker.dart';
-import '../forms/speaker_form.dart' show SpeakerFormDialog;
+
+import '../../../common/ui.dart';
+import '../services/admin_speaker_service.dart';
+import '../models/admin_speaker_model.dart';
+import '../forms/speaker_form.dart';
 
 class SpeakerList extends StatelessWidget {
   const SpeakerList({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final svc = SpeakerService();
-    return StreamBuilder<List<SpeakerModel>>(
-      stream: svc.watchAll(),
+    final svc = AdminSpeakerService();
+
+    return StreamBuilder<List<AdminSpeakerModel>>(
+      stream: svc.streamAll(),
       builder: (context, snap) {
-        if (!snap.hasData) {
+        if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        final items = snap.data!;
-        if (items.isEmpty) {
-          return const Center(child: Text('Sin ponentes'));
-        }
+        final items = snap.data ?? const [];
+        if (items.isEmpty) return const Center(child: Text('Sin ponentes'));
+
         return ListView.separated(
-          padding: const EdgeInsets.all(12),
           itemCount: items.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, i) {
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (_, i) {
             final s = items[i];
             return ListTile(
-              title: Text(s.name),
-              subtitle: Text(
-                '${s.organization ?? ''} • ${s.email ?? ''} • ${s.external ? 'Externo' : 'Interno'}',
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Theme.of(context).dividerColor),
               ),
+              title: Text(
+                s.nombre,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(s.institucion.isEmpty ? 'Externo' : s.institucion),
               trailing: PopupMenuButton<String>(
-                itemBuilder: (_) => const [
-                  PopupMenuItem<String>(value: 'edit', child: Text('Editar')),
-                  PopupMenuItem<String>(value: 'delete', child: Text('Eliminar')),
-                ],
                 onSelected: (v) async {
                   if (v == 'edit') {
-                    // ignore: use_build_context_synchronously
-                    await showDialog(
+                    showDialog(
                       context: context,
-                      builder: (_) => SpeakerFormDialog(initial: s),
+                      builder: (_) => SpeakerFormDialog(existing: s),
                     );
-                  } else if (v == 'delete') {
-                    await svc.delete(s.id);
+                  } else if (v == 'del') {
+                    try {
+                      await svc.delete(s.id);
+                      if (context.mounted) {
+                        Ui.showSnack(context, 'Ponente eliminado');
+                      }
+                    } catch (err) {
+                      if (context.mounted) {
+                        Ui.showSnack(context, 'Error: $err');
+                      }
+                    }
                   }
                 },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: Text('Editar')),
+                  PopupMenuItem(value: 'del', child: Text('Eliminar')),
+                ],
               ),
             );
           },

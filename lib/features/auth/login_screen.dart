@@ -1,43 +1,16 @@
 // lib/features/auth/login_screen.dart
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:http/http.dart' as http;
 
-import '../../app/router_by_rol.dart'; // navega según rol
-
-final _auth = FirebaseAuth.instance;
-final _fs   = FirebaseFirestore.instance;
-
-/// Usa la API KEY de tu firebase_options.dart (cualquiera funciona para este endpoint)
-const String _FIREBASE_API_KEY = 'AIzaSyA1_7Ni2tTPloZLQ_g1tvucNIfpWeFNQY4';
+// Usa tu router real
+import '../../app/router_by_rol.dart';
 
 bool _esInstitucional(String email) {
   final e = email.trim().toLowerCase();
-  return e.endsWith('@upt.pe') || e.endsWith('@virtual.upt.pe');
-}
-
-/// Consulta REST a Firebase Auth para saber proveedores de un email.
-Future<List<String>> _fetchSignInMethodsREST(String email) async {
-  final url = Uri.parse(
-    'https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=$_FIREBASE_API_KEY',
-  );
-  final resp = await http.post(
-    url,
-    headers: {'Content-Type': 'application/json'},
-    body: jsonEncode({
-      'identifier': email,
-      'continueUri': 'http://localhost',
-    }),
-  );
-  if (resp.statusCode == 200) {
-    final data = jsonDecode(resp.body);
-    return (data['allProviders'] as List?)?.cast<String>() ?? <String>[];
-  }
-  return <String>[];
+  return e.endsWith('@virtual.upt.pe'); // <- SOLO institucional si es @virtual.upt.pe
 }
 
 class LoginScreen extends StatefulWidget {
@@ -51,27 +24,12 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailCtrl = TextEditingController();
   final _passCtrl  = TextEditingController();
 
-  StreamSubscription<User?>? _authSub;
-
   bool _obscure = true;
   bool _loading = false;
   bool _modoInstitucional = true;
 
   @override
-  void initState() {
-    super.initState();
-    // Si vuelve autenticado (por redirect), intentamos navegación por rol
-    _authSub = FirebaseAuth.instance.userChanges().listen((u) async {
-      if (u != null && mounted) {
-        final ok = await _ensureUserDocAndGuard(u);
-        if (ok) await goHomeByRol(context);
-      }
-    });
-  }
-
-  @override
   void dispose() {
-    _authSub?.cancel();
     _emailCtrl..clear()..dispose();
     _passCtrl..clear()..dispose();
     super.dispose();
@@ -84,123 +42,141 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  /// Crea/actualiza doc en `usuarios/{uid}` y bloquea acceso si `estado != activo`.
-  /// Devuelve `true` si puede continuar; `false` si debe salir.
+  /// Crea/actualiza doc en `usuarios/{uid}` y lo marca activo
   Future<bool> _ensureUserDocAndGuard(User u) async {
-    final uid   = u.uid;
-    final mail  = (u.email ?? '').toLowerCase();
-    final modo  = _esInstitucional(mail) ? 'institucional' : 'externo';
-    final domain = mail.split('@').length == 2 ? mail.split('@')[1] : '';
+    try {
+      final uid   = u.uid;
+      final mail  = (u.email ?? '').toLowerCase();
+      final modo  = _esInstitucional(mail) ? 'institucional' : 'externo';
+      final domain = mail.split('@').length == 2 ? mail.split('@')[1] : '';
+      final ref = FirebaseFirestore.instance.collection('usuarios').doc(uid);
 
-    final ref = _fs.collection('usuarios').doc(uid);
+      await FirebaseFirestore.instance.runTransaction((txn) async {
+        final snap = await txn.get(ref);
+        if (!snap.exists) {
+          txn.set(ref, {
+            'email'          : mail,
+            'displayName'    : u.displayName ?? '',
+            'photoURL'       : u.photoURL ?? '',
+            'domain'         : domain,
+            'modo'           : modo,
+            'role'           : 'estudiante',
+            'rol'            : 'estudiante',
+            'active'         : true,
+            'estado'         : 'activo',
+            'isInstitutional': _esInstitucional(mail),
+            'createdAt'      : FieldValue.serverTimestamp(),
+            'updatedAt'      : FieldValue.serverTimestamp(),
+          });
+        } else {
+          final d = (snap.data() as Map<String, dynamic>? ?? {});
+          final patch = <String, dynamic>{};
 
-    await _fs.runTransaction((txn) async {
-      final snap = await txn.get(ref);
-      if (!snap.exists) {
-        txn.set(ref, {
-          'email'      : mail,
-          'displayName': u.displayName ?? '',
-          'photoURL'   : u.photoURL ?? '',
-          'domain'     : domain,
-          'modo'       : modo,
-          'rol'        : 'estudiante',
-          // institucional: activo por defecto / externo: pendiente
-          'estado'     : (modo == 'institucional') ? 'activo' : 'pendiente',
-          'createdAt'  : FieldValue.serverTimestamp(),
-          'updateAt'   : FieldValue.serverTimestamp(),
-        });
-      } else {
-        txn.update(ref, {'updateAt': FieldValue.serverTimestamp()});
-      }
-    });
+          if (d['role'] == null && d['rol'] == null) {
+            patch['role'] = 'estudiante';
+            patch['rol']  = 'estudiante';
+          } else {
+            if (d['role'] == null && d['rol'] != null) patch['role'] = d['rol'];
+            if (d['rol']  == null && d['role'] != null) patch['rol']  = d['role'];
+          }
+          if ((d['active'] ?? false) != true) patch['active'] = true;
+          if ((d['estado'] ?? '').toString().toLowerCase() != 'activo') patch['estado'] = 'activo';
 
-    final data   = (await ref.get()).data() ?? {};
-    final estado = (data['estado'] ?? 'pendiente').toString();
+          if (patch.isNotEmpty) {
+            patch['updatedAt'] = FieldValue.serverTimestamp();
+            txn.set(ref, patch, SetOptions(merge: true));
+          } else {
+            txn.update(ref, {'updatedAt': FieldValue.serverTimestamp()});
+          }
+        }
+      });
 
-    if (estado != 'activo') {
-      // Bloquear acceso si no está activo
-      _snack(modo == 'externo'
-          ? 'Tu cuenta externa está pendiente de aprobación por el administrador.'
-          : 'Tu cuenta no está activa. Contacta al administrador.');
-      await FirebaseAuth.instance.signOut();
+      return true;
+    } catch (e, st) {
+      debugPrint('_ensureUserDocAndGuard error: $e\n$st');
+      _snack('No se pudo preparar tu perfil: ${e is FirebaseException ? e.code : e}');
       return false;
     }
-    return true;
   }
 
-  // --------- LOGIN: EMAIL / PASSWORD ----------
+  // ------------------ LOGIN EMAIL ------------------
   Future<void> _loginEmail() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
       final email = _emailCtrl.text.trim().toLowerCase();
-      final pass  = _passCtrl.text;
 
-      if (_modoInstitucional && !_esInstitucional(email)) {
-        _snack('Usa tu correo institucional @upt.pe o @virtual.upt.pe');
+      // Si el usuario intenta entrar como "externo" con un correo institucional, bloquear.
+      if (!_modoInstitucional && email.endsWith('@virtual.upt.pe')) {
+        _snack('Los correos @virtual.upt.pe solo inician con Google.');
         return;
       }
 
-      final methods = await _fetchSignInMethodsREST(email);
-      final hasPassword = methods.contains('password');
-      final hasGoogle   = methods.contains('google.com');
+      final pass  = _passCtrl.text;
 
-      // SOLO Google (ejemplo: cuenta UPT creada por Google)
-      if (!hasPassword && hasGoogle) {
-        _snack('Esta cuenta se registró con Google. Abriendo inicio con Google…');
+      if (_modoInstitucional) {
+        _snack('Para cuentas institucionales usa “Iniciar sesión con Google”.');
         await _googleSignIn();
         return;
       }
 
-      if (methods.isEmpty) {
-        // No existe en Auth.
-        if (_modoInstitucional) {
-          // Institucional: forzar Google
-          _snack('No existe con password. Usa “Iniciar sesión con Google”.');
-          await _googleSignIn();
-          return;
-        } else {
-          // EXTERNO: REGISTRO controlado → queda PENDIENTE hasta que admin apruebe.
-          try {
-            final cred = await _auth.createUserWithEmailAndPassword(
-              email: email, password: pass,
-            );
-            // Crea doc y marca pendiente
-            await _fs.collection('usuarios').doc(cred.user!.uid).set({
-              'email'      : email,
-              'displayName': cred.user!.displayName ?? '',
-              'photoURL'   : cred.user!.photoURL ?? '',
-              'domain'     : email.split('@').last,
-              'modo'       : 'externo',
-              'rol'        : 'estudiante',
-              'estado'     : 'pendiente', // 👈 clave
-              'createdAt'  : FieldValue.serverTimestamp(),
-              'updateAt'   : FieldValue.serverTimestamp(),
-            });
-            _snack('Cuenta creada. Espera aprobación del administrador.');
-            await _auth.signOut();
-            return;
-          } on FirebaseAuthException catch (e) {
-            _snack(_mapAuthError(e));
-            return;
-          }
-        }
-      }
-
-      // Existe con password → login
-      final cred = await _auth.signInWithEmailAndPassword(email: email, password: pass);
-      final ok = await _ensureUserDocAndGuard(cred.user!);
-      if (ok && mounted) await goHomeByRol(context);
+      await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: pass);
+      // El AuthWrapper detectará el cambio automáticamente
     } on FirebaseAuthException catch (e) {
-      _snack(_mapAuthError(e));
-    } catch (_) {
-      _snack('Ocurrió un error. Intenta nuevamente.');
+      if (e.code == 'user-not-found') {
+        await _showRegisterDialog(_emailCtrl.text.trim());
+        return;
+      }
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential' || e.code == 'invalid-login-credentials') {
+        _snack('Correo o contraseña incorrectos.');
+      } else {
+        _snack('Auth: ${e.code}');
+      }
+    } catch (e, st) {
+      final msg = (e is AsyncError) ? '${e.error}' : e.toString();
+      debugPrint('loginEmail error: $msg\n$st');
+      _snack('Error inesperado: $msg');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  // --------- RESET PASSWORD ----------
+  // ------------------ REGISTRO EMAIL ------------------
+  Future<void> _registerEmail(String email, String pass) async {
+    setState(() => _loading = true);
+    try {
+      final cred = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: pass);
+      await FirebaseFirestore.instance.collection('usuarios').doc(cred.user!.uid).set({
+        'email'          : email.toLowerCase(),
+        'displayName'    : cred.user!.displayName ?? '',
+        'photoURL'       : cred.user!.photoURL ?? '',
+        'domain'         : email.split('@').last,
+        'modo'           : 'externo',
+        'role'           : 'estudiante',
+        'rol'            : 'estudiante',
+        'active'         : true,
+        'estado'         : 'activo',
+        'isInstitutional': false,
+        'createdAt'      : FieldValue.serverTimestamp(),
+        'updatedAt'      : FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      // El AuthWrapper detectará el cambio automáticamente
+    } on FirebaseAuthException catch (e) {
+      _snack(e.code == 'email-already-in-use'
+          ? 'Ese correo ya está registrado.'
+          : 'Auth: ${e.code}');
+    } catch (e, st) {
+      final msg = (e is AsyncError) ? '${e.error}' : e.toString();
+      debugPrint('registerEmail error: $msg\n$st');
+      _snack('Error inesperado: $msg');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // ------------------ RESET ------------------
   Future<void> _reset() async {
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
@@ -208,14 +184,14 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     try {
-      await _auth.sendPasswordResetEmail(email: email);
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
       _snack('Enlace de recuperación enviado a $email');
     } on FirebaseAuthException catch (e) {
-      _snack(_mapAuthError(e));
+      _snack('Auth: ${e.code}');
     }
   }
 
-  // --------- GOOGLE SIGN-IN (Web: POPUP, fallback REDIRECT) ----------
+  // ------------------ GOOGLE SIGN-IN ------------------
   Future<void> _googleSignIn() async {
     setState(() => _loading = true);
     try {
@@ -223,20 +199,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (kIsWeb) {
         try {
-          // POPUP primero
           final cred = await FirebaseAuth.instance.signInWithPopup(provider);
           final email = cred.user?.email?.toLowerCase() ?? '';
           if (_modoInstitucional && !_esInstitucional(email)) {
             await FirebaseAuth.instance.signOut();
-            _snack('Solo correos institucionales @upt.pe o @virtual.upt.pe');
+            _snack('Solo correos institucionales @virtual.upt.pe');
             return;
           }
-          final ok = await _ensureUserDocAndGuard(cred.user!);
-          if (ok && mounted) await goHomeByRol(context);
+          await _ensureUserDocAndGuard(cred.user!);
+          // El AuthWrapper detectará el cambio automáticamente
         } on FirebaseAuthException catch (e) {
           if (e.code == 'popup-blocked' ||
               e.code == 'popup-closed-by-user' ||
               e.code == 'unauthorized-domain') {
+            _snack('El navegador bloqueó el popup o el dominio no está autorizado. Probando redirección…');
             await FirebaseAuth.instance.signInWithRedirect(provider);
             return;
           } else {
@@ -244,47 +220,28 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         }
       } else {
-        // Android/iOS/desktop
         final cred = await FirebaseAuth.instance.signInWithProvider(provider);
         final email = cred.user?.email?.toLowerCase() ?? '';
         if (_modoInstitucional && !_esInstitucional(email)) {
           await FirebaseAuth.instance.signOut();
-          _snack('Solo correos institucionales @upt.pe o @virtual.upt.pe');
+          _snack('Solo correos institucionales @virtual.upt.pe');
           return;
         }
-        final ok = await _ensureUserDocAndGuard(cred.user!);
-        if (ok && mounted) await goHomeByRol(context);
+        await _ensureUserDocAndGuard(cred.user!);
+        // El AuthWrapper detectará el cambio automáticamente
       }
     } on FirebaseAuthException catch (e) {
       _snack('Google: ${e.code}');
-    } catch (e) {
-      _snack('Error inesperado: $e');
+    } catch (e, st) {
+      final msg = (e is AsyncError) ? '${e.error}' : e.toString();
+      debugPrint('GoogleSignIn error: $msg\n$st');
+      _snack('Error inesperado: $msg');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  String _mapAuthError(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'invalid-email': return 'Correo inválido.';
-      case 'user-disabled': return 'Usuario deshabilitado.';
-      case 'user-not-found': return 'Usuario no registrado.';
-      case 'email-already-in-use': return 'Ese correo ya está registrado.';
-      case 'weak-password': return 'Contraseña muy débil (mínimo 6).';
-      case 'wrong-password':
-      case 'invalid-credential':
-      case 'invalid-login-credentials':
-        return 'Correo o contraseña incorrectos.';
-      case 'operation-not-allowed':
-        return 'El método Email/Password está deshabilitado en Firebase Auth.';
-      case 'too-many-requests':
-        return 'Demasiados intentos. Intenta más tarde.';
-      default:
-        return 'Error de autenticación: ${e.code}';
-    }
-  }
-
-  // ---------------- UI ----------------
+  // ------------------ UI ------------------
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -293,7 +250,6 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Fondo opcional
           Container(
             decoration: const BoxDecoration(
               image: DecorationImage(
@@ -407,7 +363,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       if (email.isEmpty) return 'Ingresa tu correo';
                       if (!re.hasMatch(email)) return 'Correo inválido';
                       if (_modoInstitucional && !_esInstitucional(email)) {
-                        return 'Debe ser @upt.pe o @virtual.upt.pe';
+                        return 'Debe ser @virtual.upt.pe';
                       }
                       return null;
                     },
@@ -428,12 +384,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     validator: (v) => (v ?? '').length < 6 ? 'Mínimo 6 caracteres' : null,
                   ),
                   const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _loading ? null : _reset,
-                      child: const Text('¿Olvidaste tu contraseña?'),
-                    ),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: _loading ? null : _reset,
+                        child: const Text('¿Olvidaste tu contraseña?'),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: _loading ? null : () => _showRegisterDialog(_emailCtrl.text.trim()),
+                        child: const Text('Crear cuenta'),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   SizedBox(
@@ -474,6 +436,63 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+
+  Future<void> _showRegisterDialog(String hintEmail) async {
+    final emailCtrl = TextEditingController(text: hintEmail);
+    final pass1Ctrl = TextEditingController();
+    final pass2Ctrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Crear cuenta (externo)'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: emailCtrl,
+                decoration: const InputDecoration(labelText: 'Correo'),
+                validator: (v) {
+                  final email = (v ?? '').trim();
+                  final re = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
+                  if (email.isEmpty) return 'Ingresa tu correo';
+                  if (!re.hasMatch(email)) return 'Correo inválido';
+                  if (_esInstitucional(email)) return 'Para institucional usa Google';
+                  return null;
+                },
+              ),
+              TextFormField(
+                controller: pass1Ctrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Contraseña (min 6)'),
+                validator: (v) => (v ?? '').length < 6 ? 'Mínimo 6' : null,
+              ),
+              TextFormField(
+                controller: pass2Ctrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Repite contraseña'),
+                validator: (v) => v != pass1Ctrl.text ? 'No coincide' : null,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              Navigator.pop(context);
+              await _registerEmail(emailCtrl.text.trim(), pass1Ctrl.text);
+            },
+            child: const Text('Crear'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _GoogleButton extends StatelessWidget {
@@ -491,14 +510,7 @@ class _GoogleButton extends StatelessWidget {
           errorBuilder: (_, __, ___) => CircleAvatar(
             radius: 10,
             backgroundColor: Colors.white,
-            child: Text(
-              'G',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: Colors.black87,
-                fontSize: 12,
-              ),
-            ),
+            child: Text('G', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.black87, fontSize: 12)),
           ),
         );
 
