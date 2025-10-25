@@ -129,8 +129,31 @@ class _Dashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final card = (String title, IconData icon, Stream<int> stream) => StreamBuilder<int>(
       stream: stream,
-      initialData: 0,
-      builder: (_, s) => _MetricCard(title: title, value: s.data ?? 0, icon: icon),
+      builder: (_, s) {
+        if (s.connectionState == ConnectionState.waiting) {
+          return _MetricCard(
+            title: title,
+            value: 0,
+            icon: icon,
+            isLoading: true,
+          );
+        }
+        if (s.hasError) {
+          // ignore: avoid_print
+          print('❌ Error en $title: ${s.error}');
+          return _MetricCard(
+            title: title,
+            value: 0,
+            icon: icon,
+            hasError: true,
+          );
+        }
+        return _MetricCard(
+          title: title,
+          value: s.data ?? 0,
+          icon: icon,
+        );
+      },
     );
 
     return Padding(
@@ -140,10 +163,10 @@ class _Dashboard extends StatelessWidget {
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
         children: [
-          // Ajusta los nombres de colecciones según tu Firestore: 'eventos' o 'events'
-          card('Eventos activos', Icons.event_rounded, _count('eventos', where: ['estado','==','activo'])),
-          card('Ponencias',      Icons.schedule_rounded, _countNested('eventos','sesiones')),
-          card('Ponentes',       Icons.record_voice_over, _count('ponentes')), // o 'speakers'
+          // Usando los nombres correctos de las colecciones de Firebase
+          card('Eventos activos', Icons.event_rounded, _count('events', where: ['estado','==','activo'])),
+          card('Ponencias',      Icons.schedule_rounded, _countNested('events','sesiones')),
+          card('Ponentes',       Icons.record_voice_over, _count('speakers')),
           card('Usuarios',       Icons.people_alt_rounded, _count('usuarios')),
         ],
       ),
@@ -161,9 +184,21 @@ class _Dashboard extends StatelessWidget {
   Stream<int> _countNested(String parentCol, String childCol) {
     return FirebaseFirestore.instance.collection(parentCol).snapshots().asyncMap((parent) async {
       int total = 0;
-      for (final d in parent.docs) {
-        final n = await d.reference.collection(childCol).count().get();
-        total += n.count ?? 0;
+      try {
+        for (final d in parent.docs) {
+          try {
+            final n = await d.reference.collection(childCol).count().get();
+            total += n.count ?? 0;
+          } catch (e) {
+            // ignore: avoid_print
+            print('⚠️ Error contando $childCol en ${d.id}: $e');
+          }
+        }
+        // ignore: avoid_print
+        print('✅ Total de $childCol: $total');
+      } catch (e) {
+        // ignore: avoid_print
+        print('❌ Error contando colección anidada $parentCol/$childCol: $e');
       }
       return total;
     });
@@ -174,7 +209,17 @@ class _MetricCard extends StatelessWidget {
   final String title;
   final int value;
   final IconData icon;
-  const _MetricCard({required this.title, required this.value, required this.icon});
+  final bool isLoading;
+  final bool hasError;
+  
+  const _MetricCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    this.isLoading = false,
+    this.hasError = false,
+  });
+  
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -189,7 +234,16 @@ class _MetricCard extends StatelessWidget {
             CircleAvatar(
               radius: 26,
               backgroundColor: cs.primary.withOpacity(.12),
-              child: Icon(icon, color: cs.primary, size: 28),
+              child: isLoading
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: cs.primary,
+                      ),
+                    )
+                  : Icon(icon, color: cs.primary, size: 28),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -199,7 +253,39 @@ class _MetricCard extends StatelessWidget {
                 children: [
                   Text(title, style: TextStyle(color: cs.onSurfaceVariant)),
                   const SizedBox(height: 6),
-                  Text('$value', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: cs.onSurface)),
+                  if (hasError)
+                    Text(
+                      'Error',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: cs.error,
+                      ),
+                    )
+                  else
+                    Row(
+                      children: [
+                        Text(
+                          '$value',
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                        if (isLoading) ...[
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                 ],
               ),
             ),
