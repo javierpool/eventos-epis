@@ -42,7 +42,7 @@ bool _shouldBeAdmin(String? email) {
   
   // TEMPORAL: El primer usuario con email institucional es admin
   // (Puedes comentar esto después de configurar el primer admin)
-  if (emailLower.endsWith('@virtual.upt.pe')) {
+  if (emailLower.endsWith('@virtual.upt.pe') || emailLower.endsWith('@upt.pe')) {
     // Solo para el primer usuario - después comenta esto
     return true;
   }

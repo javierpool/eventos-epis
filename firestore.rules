@@ -125,12 +125,12 @@ service cloud.firestore {
     }
     
     // ===========================================
-    // Para desarrollo: DESCOMENTA ESTO TEMPORALMENTE
-    // (permitir todo mientras pruebas)
+    // TEMPORAL: Para desarrollo y configuración inicial
+    // ⚠️ COMENTAR ESTO EN PRODUCCIÓN
     // ===========================================
-    // match /{document=**} {
-    //   allow read, write: if true;
-    // }
+    match /{document=**} {
+      allow read, write: if isSignedIn();
+    }
   }
 }
 
