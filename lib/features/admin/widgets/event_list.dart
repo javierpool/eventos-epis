@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../common/ui.dart';
 
-import '../../../services/admin_event_service.dart';
+import '../services/admin_event_service.dart';
 import '../models/admin_event_model.dart';
 import '../forms/event_form.dart';
 

@@ -10,6 +10,7 @@ class AppUser {
   final bool active;
   final bool? isInstitutional;
   final String? photoURL;
+  final String? faculty; // Facultad del usuario (FAING, FACEM, etc.)
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -21,6 +22,7 @@ class AppUser {
     this.active = true,
     this.isInstitutional,
     this.photoURL,
+    this.faculty,
     this.createdAt,
     this.updatedAt,
   });
@@ -36,6 +38,7 @@ class AppUser {
       active: (d['active'] ?? true) as bool,
       isInstitutional: d['isInstitutional'] as bool?,
       photoURL: d['photoURL'] as String?,
+      faculty: d['faculty'] as String?,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (d['updatedAt'] as Timestamp?)?.toDate(),
     );
@@ -50,6 +53,7 @@ class AppUser {
       'active': active,
       'isInstitutional': isInstitutional,
       'photoURL': photoURL,
+      'faculty': faculty,
       'createdAt':
           createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),

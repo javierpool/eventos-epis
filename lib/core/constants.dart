@@ -51,6 +51,31 @@ class InstitutionalDomains {
   }
 }
 
+/// Constantes de facultades de la UPT
+class Faculties {
+  static const String faing = 'FAING';
+  static const String fade = 'FADE';
+  static const String facem = 'FACEM';
+  static const String facsa = 'FACSA';
+  static const String faedcoh = 'FAEDCOH';
+  static const String fau = 'FAU';
+  
+  static const Map<String, String> names = {
+    faing: 'Facultad de Ingeniería',
+    fade: 'Facultad de Derecho y Ciencias Políticas',
+    facem: 'Facultad de Ciencias Empresariales',
+    facsa: 'Facultad de Ciencias de la Salud',
+    faedcoh: 'Facultad de Educación, Ciencias de la Comunicación y Humanidades',
+    fau: 'Facultad de Arquitectura y Urbanismo',
+  };
+  
+  static List<String> get all => [faing, fade, facem, facsa, faedcoh, fau];
+  
+  static String getFullName(String code) => names[code] ?? code;
+  
+  static bool isValid(String faculty) => all.contains(faculty);
+}
+
 /// Constantes de validación
 class ValidationConstants {
   static const int minPasswordLength = 6;

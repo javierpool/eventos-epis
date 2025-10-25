@@ -30,4 +30,12 @@ class UserService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
+
+  /// Cambia la facultad del usuario.
+  Future<void> setFaculty(String uid, String faculty) async {
+    await _db.doc(FirestorePaths.user(uid)).update({
+      'faculty': faculty,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
 }

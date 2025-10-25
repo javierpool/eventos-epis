@@ -8,6 +8,7 @@ import '../core/constants.dart';
 import '../core/error_handler.dart';
 import '../features/admin/admin_home_screen.dart';
 import '../features/events/student_home_screen.dart';
+import '../features/student/faculty_selection_screen.dart';
 
 // Stubs (si los tienes ya, quita esto)
 class DocenteHome extends StatelessWidget {
@@ -25,29 +26,21 @@ class PonenteHome extends StatelessWidget {
 
 /// Determina si un usuario debería ser admin automáticamente
 /// 
-/// TEMPORAL: Configura aquí los emails que deberían ser admin
+/// PRODUCCIÓN: Solo los emails en esta lista pueden ser administradores
 bool _shouldBeAdmin(String? email) {
   if (email == null) return false;
   
   final emailLower = email.toLowerCase().trim();
   
-  // Lista de emails que deberían ser admin
+  // ⚠️ IMPORTANTE: Solo agrega aquí los emails de administradores autorizados
   const adminEmails = [
-    // Agrega aquí tu email de administrador
-    // Ejemplo: 'admin@virtual.upt.pe',
+    'joarteaga@upt.pe',  // Administrador principal
+    // Agrega más emails de administradores aquí si es necesario:
+    // 'otro.admin@upt.pe',
   ];
   
-  // Si está en la lista de admins
-  if (adminEmails.contains(emailLower)) return true;
-  
-  // TEMPORAL: El primer usuario con email institucional es admin
-  // (Puedes comentar esto después de configurar el primer admin)
-  if (emailLower.endsWith('@virtual.upt.pe') || emailLower.endsWith('@upt.pe')) {
-    // Solo para el primer usuario - después comenta esto
-    return true;
-  }
-  
-  return false;
+  // Solo los usuarios en la lista son admin
+  return adminEmails.contains(emailLower);
 }
 
 /// Función que devuelve el widget de home según el rol del usuario
@@ -93,22 +86,7 @@ Future<Widget> goHomeByRolWidget(BuildContext context, User user) async {
 
     final data = Map<String, dynamic>.from(snap.data() ?? {});
     
-    // TEMPORAL: Actualizar a admin si el usuario debería serlo pero no lo es
-    final isAutoAdmin = _shouldBeAdmin(user.email);
-    final currentRole = (data['role'] ?? data['rol'])?.toString() ?? UserRoles.student;
-    
-    if (isAutoAdmin && currentRole.toLowerCase() != UserRoles.admin) {
-      AppLogger.info('🔄 Actualizando usuario a ADMIN: ${user.email}');
-      await ref.update({
-        'role': UserRoles.admin,
-        'rol': UserRoles.admin,
-        'active': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      AppLogger.success('✅ Usuario actualizado a ADMINISTRADOR');
-      return const AdminHomeScreen();
-    }
-    
+    // Obtener el rol actual del usuario (respetando el rol en la base de datos)
     final roleRaw = (data['role'] ?? data['rol'])?.toString() ?? UserRoles.student;
     final role = roleRaw.toLowerCase().trim();
     final active = (data['active'] ?? true) == true;
@@ -123,6 +101,13 @@ Future<Widget> goHomeByRolWidget(BuildContext context, User user) async {
           child: Text('Tu cuenta está pendiente de activación.'),
         ),
       );
+    }
+
+    // Si es estudiante y no tiene facultad, pedir selección
+    final faculty = data['faculty'] as String?;
+    if (role == UserRoles.student && (faculty == null || faculty.isEmpty)) {
+      AppLogger.info('Estudiante sin facultad, mostrando selector');
+      return const FacultySelectionScreen();
     }
 
     final Widget home = switch (role) {
@@ -183,6 +168,18 @@ Future<void> goHomeByRol(BuildContext context) async {
       );
       await FirebaseAuth.instance.signOut();
       AppLogger.warning('Cuenta inactiva, sesión cerrada');
+      return;
+    }
+
+    // Si es estudiante y no tiene facultad, pedir selección
+    final faculty = data['faculty'] as String?;
+    if (role == UserRoles.student && (faculty == null || faculty.isEmpty)) {
+      if (!context.mounted) return;
+      AppLogger.info('Estudiante sin facultad, mostrando selector');
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const FacultySelectionScreen()),
+        (_) => false,
+      );
       return;
     }
 
