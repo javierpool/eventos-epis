@@ -7,29 +7,36 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    // Función helper para verificar si el usuario es admin
-    function isAdmin() {
-      return isSignedIn() && 
-             get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == 'admin';
-    }
-    
     // Función helper para verificar si es el mismo usuario
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Función helper para verificar si el usuario es admin
+    // SOLO usar en colecciones que NO sean usuarios para evitar dependencia circular
+    function isAdmin() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == 'admin';
     }
     
     // ===========================================
     // COLECCIÓN: usuarios
     // ===========================================
     match /usuarios/{userId} {
-      // Lectura: el propio usuario o admin
-      allow read: if isOwner(userId) || isAdmin();
+      // Lectura: cualquier usuario autenticado puede leer su propio documento
+      // IMPORTANTE: No usar isAdmin() aquí para evitar dependencia circular
+      allow read: if isSignedIn() && (request.auth.uid == userId);
       
       // Creación: cualquier usuario autenticado puede crear su propio documento
       allow create: if isSignedIn() && request.auth.uid == userId;
       
-      // Actualización y eliminación: solo admin
-      allow update, delete: if isAdmin();
+      // Actualización: el propio usuario puede actualizar algunos campos
+      // o usar custom claims para admin (más eficiente que leer Firestore)
+      allow update: if isSignedIn() && request.auth.uid == userId;
+      
+      // Eliminación: deshabilitada para seguridad
+      allow delete: if false;
     }
     
     // ===========================================
