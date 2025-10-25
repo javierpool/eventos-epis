@@ -15,11 +15,25 @@ class AdminSpeakerService {
   }
 
   Future<void> upsert(AdminSpeakerModel s) async {
-    final data = s.id.isEmpty ? s.toCreate() : s.toUpdate();
-    if (s.id.isEmpty) {
-      await _col.add(data);
-    } else {
-      await _col.doc(s.id).set(data, SetOptions(merge: true));
+    try {
+      final data = s.id.isEmpty ? s.toCreate() : s.toUpdate();
+      if (s.id.isEmpty) {
+        final docRef = await _col.add(data);
+        // ignore: avoid_print
+        print('✅ Ponente creado con ID: ${docRef.id}');
+      } else {
+        await _col.doc(s.id).set(data, SetOptions(merge: true));
+        // ignore: avoid_print
+        print('✅ Ponente actualizado: ${s.id}');
+      }
+    } on FirebaseException catch (e) {
+      // ignore: avoid_print
+      print('❌ Error Firebase: ${e.code} - ${e.message}');
+      rethrow;
+    } catch (e) {
+      // ignore: avoid_print
+      print('❌ Error inesperado: $e');
+      rethrow;
     }
   }
 

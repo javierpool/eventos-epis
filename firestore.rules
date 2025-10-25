@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Función helper para verificar si el usuario está autenticado
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Función helper para verificar si el usuario es admin
+    function isAdmin() {
+      return isSignedIn() && 
+             get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Función helper para verificar si es el mismo usuario
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // ===========================================
+    // COLECCIÓN: usuarios
+    // ===========================================
+    match /usuarios/{userId} {
+      // Lectura: el propio usuario o admin
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Creación: cualquier usuario autenticado puede crear su propio documento
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      
+      // Actualización y eliminación: solo admin
+      allow update, delete: if isAdmin();
+    }
+    
+    // ===========================================
+    // COLECCIÓN: eventos
+    // ===========================================
+    match /eventos/{eventId} {
+      // Lectura: todos (público)
+      allow read: if true;
+      
+      // Escritura: solo admin
+      allow write: if isAdmin();
+      
+      // Subcolección: sesiones
+      match /sesiones/{sessionId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+    
+    // ===========================================
+    // COLECCIÓN: ponentes/speakers
+    // ===========================================
+    match /ponentes/{speakerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /speakers/{speakerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // ===========================================
+    // COLECCIÓN: inscripciones/registrations
+    // ===========================================
+    match /inscripciones/{registrationId} {
+      // Lectura: el usuario que se inscribió o admin
+      allow read: if isSignedIn() && 
+                     (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Creación: usuarios autenticados
+      allow create: if isSignedIn();
+      
+      // Actualización: solo admin (para marcar asistencia)
+      allow update: if isAdmin();
+      
+      // Eliminación: solo admin
+      allow delete: if isAdmin();
+    }
+    
+    match /registrations/{registrationId} {
+      allow read: if isSignedIn() && 
+                     (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+    
+    // ===========================================
+    // COLECCIÓN: asistencias/attendance
+    // ===========================================
+    match /asistencias/{attendanceId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+    
+    // ===========================================
+    // Para desarrollo: DESCOMENTA ESTO TEMPORALMENTE
+    // (permitir todo mientras pruebas)
+    // ===========================================
+    // match /{document=**} {
+    //   allow read, write: if true;
+    // }
+  }
+}
+

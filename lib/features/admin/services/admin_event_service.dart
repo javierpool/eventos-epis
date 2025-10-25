@@ -28,14 +28,19 @@ class AdminEventService {
       if (e.id.isEmpty) {
         // CREATE
         final data = e.toMapForCreate()..['dias'] = diasCalc;
-        await _col.add(data);
+        final docRef = await _col.add(data);
+        // ignore: avoid_print
+        print('✅ Evento creado con ID: ${docRef.id}');
       } else {
         // UPDATE (merge)
         final data = e.toMapForUpdate()..['dias'] = diasCalc;
         await _col.doc(e.id).set(data, SetOptions(merge: true));
+        // ignore: avoid_print
+        print('✅ Evento actualizado: ${e.id}');
       }
     } on FirebaseException catch (e) {
-      // Te muestra PERMISSION_DENIED, missing index, etc.
+      // ignore: avoid_print
+      print('❌ Error Firebase: ${e.code} - ${e.message}');
       throw 'Firestore upsert() falló: ${e.message}';
     }
   }
