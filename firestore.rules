@@ -24,15 +24,14 @@ service cloud.firestore {
     // COLECCIÓN: usuarios
     // ===========================================
     match /usuarios/{userId} {
-      // Lectura: cualquier usuario autenticado puede leer su propio documento
-      // IMPORTANTE: No usar isAdmin() aquí para evitar dependencia circular
-      allow read: if isSignedIn() && (request.auth.uid == userId);
+      // TEMPORAL: Más permisivo para desarrollo
+      // Lectura: cualquier usuario autenticado puede leer cualquier perfil
+      allow read: if isSignedIn();
       
       // Creación: cualquier usuario autenticado puede crear su propio documento
       allow create: if isSignedIn() && request.auth.uid == userId;
       
-      // Actualización: el propio usuario puede actualizar algunos campos
-      // o usar custom claims para admin (más eficiente que leer Firestore)
+      // Actualización: el propio usuario puede actualizar su perfil
       allow update: if isSignedIn() && request.auth.uid == userId;
       
       // Eliminación: deshabilitada para seguridad
