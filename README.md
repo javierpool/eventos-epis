@@ -68,58 +68,23 @@ qr_flutter: ^4.1.0
 mobile_scanner: ^7.1.2
 ```
 
-## 🛠️ Instalación y Configuración
+## 🛠️ Instalación Rápida
 
-### Requisitos Previos
+Para comenzar rápidamente:
 
-- Flutter SDK (>=3.0.0)
-- Cuenta de Firebase
-- Android Studio / VS Code
-- Git
-
-### Pasos de Instalación
-
-1. **Clonar el repositorio**
 ```bash
-git clone https://github.com/TU-USUARIO/eventos-epis.git
+# 1. Clonar el repositorio
+git clone https://github.com/javierpool/eventos-epis.git
 cd eventos-epis
-```
 
-2. **Instalar dependencias**
-```bash
+# 2. Instalar dependencias
 flutter pub get
-```
 
-3. **Configurar Firebase**
-   - Crea un proyecto en [Firebase Console](https://console.firebase.google.com/)
-   - Descarga y configura:
-     - `android/app/google-services.json` (Android)
-     - `ios/Runner/GoogleService-Info.plist` (iOS)
-   - El archivo `lib/firebase_options.dart` ya está configurado
-
-4. **Habilitar autenticación en Firebase**
-   - Ve a Authentication > Sign-in method
-   - Habilita "Email/Password"
-   - Habilita "Google"
-
-5. **Configurar Firestore**
-   - Crea la base de datos en modo producción
-   - Las colecciones se crearán automáticamente
-
-6. **Ejecutar la aplicación**
-```bash
-# Para web
-flutter run -d chrome
-
-# Para Edge
-flutter run -d edge
-
-# Para Android
+# 3. Ejecutar la aplicación
 flutter run
-
-# Para Windows
-flutter run -d windows
 ```
+
+**📖 Para instrucciones completas de instalación y configuración, ver [Guía de Instalación](docs/INSTALLATION.md)**
 
 ## 📁 Estructura del Proyecto
 
@@ -189,6 +154,54 @@ Para crear el primer usuario admin, registra un usuario y luego modifica su rol 
 
 _(Agrega capturas de pantalla de tu aplicación aquí)_
 
+---
+
+## 📚 Documentación Completa
+
+Este proyecto cuenta con documentación detallada para diferentes audiencias:
+
+### Para Usuarios
+
+- **[📖 Guía de Usuario](docs/USER_GUIDE.md)** - Cómo usar la aplicación paso a paso
+  - Panel de Administrador
+  - Panel de Estudiante
+  - Panel de Docente
+  - Sistema de Asistencia QR
+  - Preguntas Frecuentes
+
+### Para Desarrolladores
+
+- **[🛠️ Guía de Instalación](docs/INSTALLATION.md)** - Configuración del entorno de desarrollo
+  - Requisitos del sistema
+  - Instalación paso a paso
+  - Configuración de Firebase
+  - Solución de problemas
+
+- **[🔧 Documentación de API](docs/API_DOCUMENTATION.md)** - Documentación técnica completa
+  - Arquitectura del sistema
+  - Modelos de datos
+  - Servicios y APIs
+  - Firebase Collections
+  - Cloud Functions
+  - Ejemplos de uso
+
+- **[🤝 Guía de Contribución](docs/CONTRIBUTING.md)** - Cómo contribuir al proyecto
+  - Código de conducta
+  - Estándares de código
+  - Flujo de trabajo con Git
+  - Guías de commits
+  - Tests y calidad
+
+- **[🚀 Guía de Despliegue](docs/DEPLOYMENT.md)** - Despliegue en producción
+  - Despliegue Web (Firebase, Netlify, Vercel)
+  - Despliegue Android (Play Store)
+  - Despliegue iOS (App Store)
+  - Despliegue Windows (Microsoft Store)
+  - CI/CD con GitHub Actions
+  - Monitoreo y mantenimiento
+
+---
+
 ## 📝 Notas de Desarrollo
 
 - **AuthWrapper**: Maneja automáticamente el estado de autenticación y redirección por roles
@@ -203,9 +216,20 @@ _(Agrega capturas de pantalla de tu aplicación aquí)_
 
 ## 🤝 Contribuir
 
+¿Quieres contribuir al proyecto? ¡Excelente! 
+
+Lee nuestra **[Guía de Contribución](docs/CONTRIBUTING.md)** para conocer:
+- Cómo configurar tu entorno
+- Estándares de código
+- Proceso de Pull Requests
+- Cómo reportar bugs
+- Cómo sugerir mejoras
+
+Pasos rápidos:
+
 1. Fork el proyecto
 2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
+3. Commit tus cambios (`git commit -m 'feat: add amazing feature'`)
 4. Push a la rama (`git push origin feature/AmazingFeature`)
 5. Abre un Pull Request
 
